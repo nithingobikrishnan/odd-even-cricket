@@ -1,8 +1,8 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Odd Even IPL FINAL</title>
+<title>Odd Even FINAL FIXED</title>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -18,7 +18,7 @@ button{padding:10px;margin:5px;border:none;border-radius:8px;background:#3b82f6;
 
 <body>
 
-<h2>🏏 Odd Even IPL FINAL</h2>
+<h2>🏏 Odd Even FINAL (Stable)</h2>
 
 <div class="card">
 Room: <input id="room">
@@ -77,7 +77,7 @@ function join(){
 
   if(!d.players.p1){
     u["players/p1"]=playerId;
-    role="p1";
+    role="p1"; // HOST
   }else if(!d.players.p2){
     u["players/p2"]=playerId;
     role="p2";
@@ -97,32 +97,31 @@ function join(){
   updateStatus(d);
   render();
 
-  // 🏁 MATCH END SYNC (NEW)
-  if(state.matchOver){
-    alert(state.result);
-    return;
+  // 🧠 ONLY HOST RESOLVES
+  if(role==="p1" && state.batMove!=null && state.bowlMove!=null && !state.matchOver){
+    resolve();
   }
 
-  if(role===state.batting && state.batMove!=null && state.bowlMove!=null){
-    resolve();
+  // MATCH END SYNC
+  if(state.matchOver){
+    alert(state.result);
   }
  });
 }
 
 // ROLE
 function roleUI(){
- document.getElementById("role").innerText =
-   role==="p1"?"🟢 Player 1":"🔴 Player 2";
+ role.innerText = role==="p1"?"🟢 Host":"🔴 Player";
 }
 
 // STATUS
 function updateStatus(d){
- document.getElementById("status").innerText =
+ status.innerText =
  (!d.players||!d.players.p1||!d.players.p2)
  ? "Waiting..." : "Ready ✅";
 }
 
-// DEFAULT STATE
+// DEFAULT
 function defaultState(){
  return{
   innings:1,
@@ -140,7 +139,6 @@ function defaultState(){
  };
 }
 
-// FIX
 function fixState(){
  state.score=Number(state.score||0);
  state.wk=Number(state.wk||0);
@@ -172,7 +170,7 @@ function play(n){
  }
 }
 
-// RESOLVE
+// RESOLVE (HOST ONLY)
 function resolve(){
 
  let bat=Number(state.batMove);
@@ -236,7 +234,7 @@ function checkGame(){
  }
 }
 
-// 🏁 FIXED END MATCH
+// END MATCH
 function endMatch(chase){
 
  state.matchOver = true;
