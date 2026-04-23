@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h2>🏆 Tournament</h2>
+
+<div class="card">
+<button onclick="start()">Start Tournament</button>
+<div id="table"></div>
+</div>
+
+<script>
+
+let teams=[
+ {name:"A",pts:0},
+ {name:"B",pts:0},
+ {name:"C",pts:0},
+ {name:"D",pts:0},
+ {name:"E",pts:0}
+];
+
+function start(){
+ teams.forEach(t=>{
+  t.pts=Math.floor(Math.random()*10);
+ });
+ render();
+}
+
+function render(){
+ table.innerHTML=teams
+ .sort((a,b)=>b.pts-a.pts)
+ .map(t=>t.name+" - "+t.pts+" pts").join("<br>");
+}
+
+</script>
+
+</body>
+</html>
