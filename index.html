@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Odd Even IPL Final Stable</title>
+<title>Odd Even IPL Fixed</title>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -18,7 +18,7 @@ button{padding:10px;margin:5px;border:none;border-radius:8px;background:#3b82f6;
 
 <body>
 
-<h2>🏏 Odd Even IPL (Stable)</h2>
+<h2>🏏 Odd Even IPL</h2>
 
 <div class="card">
 Room: <input id="room">
@@ -97,7 +97,6 @@ function join(){
   updateStatus(d);
   render();
 
-  // ONLY BATTER (p1 or p2 depending on state.batting)
   if(role===state.batting && state.batMove!=null && state.bowlMove!=null){
     resolve();
   }
@@ -106,16 +105,15 @@ function join(){
 
 // ROLE
 function roleUI(){
- role.innerText = role==="p1"?"🟢 Player 1":"🔴 Player 2";
+ document.getElementById("role").innerText =
+   role==="p1"?"🟢 Player 1":"🔴 Player 2";
 }
 
 // STATUS
 function updateStatus(d){
- if(!d.players||!d.players.p1||!d.players.p2){
-  status.innerText="Waiting...";
- }else{
-  status.innerText="Ready ✅";
- }
+ document.getElementById("status").innerText =
+ (!d.players||!d.players.p1||!d.players.p2)
+ ? "Waiting..." : "Ready ✅";
 }
 
 // DEFAULT STATE
@@ -130,7 +128,7 @@ function defaultState(){
   batMove:null,
   bowlMove:null,
   last6:[],
-  batting:"p1" // who is batting
+  batting:"p1"
  };
 }
 
@@ -145,10 +143,7 @@ function fixState(){
 
 // START GAME
 function startGame(){
- if(!roomRef) return;
-
- let g = defaultState();
- roomRef.update({game:g});
+ roomRef.update({game:defaultState()});
 }
 
 // PLAY
@@ -185,7 +180,6 @@ function resolve(){
   symbol=runs;
  }
 
- // LAST 6
  state.last6.push(symbol);
  if(state.last6.length>6) state.last6.shift();
 
@@ -196,38 +190,28 @@ function resolve(){
  state.bowlMove=null;
 
  checkGame();
-
  roomRef.update({game:state});
 }
 
-// GAME FLOW FIXED
+// GAME FLOW
 function checkGame(){
 
- // END INNINGS
  if(state.wk===10 || state.over===5){
 
   if(state.innings===1){
 
     state.target = state.score + 1;
-
     state.innings = 2;
 
-    // RESET
-    state.score = 0;
-    state.wk = 0;
-    state.ball = 0;
-    state.over = 0;
-    state.last6 = [];
+    state.score=0;
+    state.wk=0;
+    state.ball=0;
+    state.over=0;
+    state.last6=[];
 
-    state.batMove=null;
-    state.bowlMove=null;
-
-    // SWITCH BATTER
     state.batting = state.batting==="p1"?"p2":"p1";
 
-    setTimeout(()=>{
-      alert("2nd Innings! Target: " + state.target);
-    },100);
+    alert("2nd Innings! Target: " + state.target);
 
   } else {
     endMatch(false);
@@ -236,50 +220,51 @@ function checkGame(){
   return;
  }
 
- // CHASE WIN
  if(state.innings===2 && state.score>=state.target){
   endMatch(true);
  }
 }
 
 function endMatch(chase=false){
- let msg = chase ? "CHASED! 🏆" : "DEFENDED! 🏆";
- alert(msg);
+ alert(chase?"CHASED! 🏆":"DEFENDED! 🏆");
  location.reload();
 }
 
-// RENDER IPL UI
+// RENDER (FIXED)
 function render(){
 
- teamScore.innerText = state.score + "/" + state.wk;
+ document.getElementById("teamScore").innerText =
+   state.score + "/" + state.wk;
 
- overs.innerText = state.over + "." + (state.ball % 6) + " overs";
+ document.getElementById("overs").innerText =
+   state.over + "." + (state.ball % 6) + " overs";
 
+ // ✅ FIXED CRR
  let balls = state.ball || 1;
  let crr = (state.score / (balls/6)).toFixed(2);
- crrEl.innerText = "CRR: " + crr;
+ document.getElementById("crr").innerText = "CRR: " + crr;
 
  if(state.target){
    let ballsLeft = (5*6) - state.ball;
    let runsLeft = state.target - state.score;
 
-   targetBox.innerText =
+   document.getElementById("targetBox").innerText =
      "Target: " + state.target +
      " | Need: " + runsLeft + " (" + ballsLeft + " balls)";
  } else {
-   targetBox.innerText="";
+   document.getElementById("targetBox").innerText="";
  }
 
- last6.innerText = "Last: " + state.last6.join(" ");
+ document.getElementById("last6").innerText =
+   "Last: " + state.last6.join(" ");
 
- matchStatus.innerText =
+ document.getElementById("matchStatus").innerText =
    state.innings===1 ? "1st Innings" : "Chasing";
 
- if(role===state.batting){
-   turn.innerText = state.batMove==null ? "Your Bat" : "Waiting...";
- }else{
-   turn.innerText = state.bowlMove==null ? "Your Bowl" : "Waiting...";
- }
+ document.getElementById("turn").innerText =
+   role===state.batting
+   ? (state.batMove==null?"Your Bat":"Waiting...")
+   : (state.bowlMove==null?"Your Bowl":"Waiting...");
 }
 
 </script>
