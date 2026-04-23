@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odd Even IPL Final Stable</title>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+<style>
+body{background:#0f172a;color:white;text-align:center;font-family:sans-serif}
+.card{background:#1e293b;margin:10px;padding:12px;border-radius:12px}
+button{padding:10px;margin:5px;border:none;border-radius:8px;background:#3b82f6;color:white}
+.grid{display:grid;grid-template-columns:repeat(6,1fr)}
+.big{font-size:26px;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<h2>🏏 Odd Even IPL (Stable)</h2>
+
+<div class="card">
+Room: <input id="room">
+<button onclick="join()">Join</button>
+<p id="status">Not connected</p>
+<p id="role"></p>
+<button onclick="startGame()">Start Match</button>
+</div>
+
+<div class="card">
+  <div class="big" id="teamScore">0/0</div>
+  <div id="overs">0.0 overs</div>
+  <div id="crr"></div>
+  <div id="targetBox"></div>
+  <div id="last6"></div>
+  <div id="matchStatus"></div>
+  <div id="turn"></div>
+</div>
+
+<div class="grid" id="buttons"></div>
+
+<script>
+
+// FIREBASE
+firebase.initializeApp({
+ apiKey:"AIzaSyCrVyYIQk7pgMW05n4gYgTFwcLGZEh3IdI",
+ databaseURL:"https://odd-even-cricket-6fcb7-default-rtdb.asia-southeast1.firebasedatabase.app"
+});
+const db=firebase.database();
+
+let playerId=Math.random().toString(36).slice(2);
+let role=null;
+let roomRef=null;
+let state={};
+
+// BUTTONS
+for(let i=0;i<=10;i++){
+ let b=document.createElement("button");
+ b.innerText=i;
+ b.onclick=()=>play(i);
+ buttons.appendChild(b);
+}
+
+// JOIN
+function join(){
+ let r=room.value;
+ if(!r) return alert("Enter room");
+
+ roomRef=db.ref("rooms/"+r);
+
+ roomRef.once("value").then(s=>{
+  let d=s.val()||{};
+  if(!d.players)d.players={};
+
+  let u={};
+
+  if(!d.players.p1){
+    u["players/p1"]=playerId;
+    role="p1";
+  }else if(!d.players.p2){
+    u["players/p2"]=playerId;
+    role="p2";
+  }else{
+    status.innerText="Room full";return;
+  }
+
+  roomRef.update(u);
+  roleUI();
+ });
+
+ roomRef.on("value",snap=>{
+  let d=snap.val()||{};
+  state=d.game||defaultState();
+
+  fixState();
+  updateStatus(d);
+  render();
+
+  // ONLY BATTER (p1 or p2 depending on state.batting)
+  if(role===state.batting && state.batMove!=null && state.bowlMove!=null){
+    resolve();
+  }
+ });
+}
+
+// ROLE
+function roleUI(){
+ role.innerText = role==="p1"?"🟢 Player 1":"🔴 Player 2";
+}
+
+// STATUS
+function updateStatus(d){
+ if(!d.players||!d.players.p1||!d.players.p2){
+  status.innerText="Waiting...";
+ }else{
+  status.innerText="Ready ✅";
+ }
+}
+
+// DEFAULT STATE
+function defaultState(){
+ return{
+  innings:1,
+  score:0,
+  wk:0,
+  ball:0,
+  over:0,
+  target:null,
+  batMove:null,
+  bowlMove:null,
+  last6:[],
+  batting:"p1" // who is batting
+ };
+}
+
+// FIX NUMBERS
+function fixState(){
+ state.score=Number(state.score||0);
+ state.wk=Number(state.wk||0);
+ state.ball=Number(state.ball||0);
+ state.over=Number(state.over||0);
+ if(!state.last6) state.last6=[];
+}
+
+// START GAME
+function startGame(){
+ if(!roomRef) return;
+
+ let g = defaultState();
+ roomRef.update({game:g});
+}
+
+// PLAY
+function play(n){
+
+ if(role!==state.batting && n===0){
+  alert("Bowler no 0");return;
+ }
+
+ if(role===state.batting){
+   if(state.batMove!=null)return;
+   roomRef.update({"game/batMove":Number(n)});
+ }else{
+   if(state.bowlMove!=null)return;
+   roomRef.update({"game/bowlMove":Number(n)});
+ }
+}
+
+// RESOLVE
+function resolve(){
+
+ let bat=Number(state.batMove);
+ let bowl=Number(state.bowlMove);
+
+ let symbol="";
+ let runs=0;
+
+ if(bat===bowl||(bat===0&&bowl===1)){
+  state.wk++;
+  symbol="W";
+ }else{
+  runs=bat===0?bowl:bat;
+  state.score+=runs;
+  symbol=runs;
+ }
+
+ // LAST 6
+ state.last6.push(symbol);
+ if(state.last6.length>6) state.last6.shift();
+
+ state.ball++;
+ if(state.ball%6===0) state.over++;
+
+ state.batMove=null;
+ state.bowlMove=null;
+
+ checkGame();
+
+ roomRef.update({game:state});
+}
+
+// GAME FLOW FIXED
+function checkGame(){
+
+ // END INNINGS
+ if(state.wk===10 || state.over===5){
+
+  if(state.innings===1){
+
+    state.target = state.score + 1;
+
+    state.innings = 2;
+
+    // RESET
+    state.score = 0;
+    state.wk = 0;
+    state.ball = 0;
+    state.over = 0;
+    state.last6 = [];
+
+    state.batMove=null;
+    state.bowlMove=null;
+
+    // SWITCH BATTER
+    state.batting = state.batting==="p1"?"p2":"p1";
+
+    setTimeout(()=>{
+      alert("2nd Innings! Target: " + state.target);
+    },100);
+
+  } else {
+    endMatch(false);
+  }
+
+  return;
+ }
+
+ // CHASE WIN
+ if(state.innings===2 && state.score>=state.target){
+  endMatch(true);
+ }
+}
+
+function endMatch(chase=false){
+ let msg = chase ? "CHASED! 🏆" : "DEFENDED! 🏆";
+ alert(msg);
+ location.reload();
+}
+
+// RENDER IPL UI
+function render(){
+
+ teamScore.innerText = state.score + "/" + state.wk;
+
+ overs.innerText = state.over + "." + (state.ball % 6) + " overs";
+
+ let balls = state.ball || 1;
+ let crr = (state.score / (balls/6)).toFixed(2);
+ crrEl.innerText = "CRR: " + crr;
+
+ if(state.target){
+   let ballsLeft = (5*6) - state.ball;
+   let runsLeft = state.target - state.score;
+
+   targetBox.innerText =
+     "Target: " + state.target +
+     " | Need: " + runsLeft + " (" + ballsLeft + " balls)";
+ } else {
+   targetBox.innerText="";
+ }
+
+ last6.innerText = "Last: " + state.last6.join(" ");
+
+ matchStatus.innerText =
+   state.innings===1 ? "1st Innings" : "Chasing";
+
+ if(role===state.batting){
+   turn.innerText = state.batMove==null ? "Your Bat" : "Waiting...";
+ }else{
+   turn.innerText = state.bowlMove==null ? "Your Bowl" : "Waiting...";
+ }
+}
+
+</script>
+
+</body>
+</html>
