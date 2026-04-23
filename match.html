@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="app.js"></script>
+</head>
+
+<body>
+
+<h2>🏏 IPL MATCH</h2>
+
+<div class="card">
+<div class="big" id="score">0/0</div>
+<div id="overs"></div>
+<div id="target"></div>
+<div id="crr"></div>
+<div id="rrr"></div>
+<div id="turn"></div>
+
+<div id="playersUI"></div>
+<div id="strikerUI"></div>
+<div id="bowlerUI"></div>
+</div>
+
+<div class="card">
+<h4>Ball Log</h4>
+<div id="log"></div>
+</div>
+
+<div class="grid" id="buttons"></div>
+
+<script>
+
+// 🔥 USERNAME SYSTEM
+let username = localStorage.getItem("username");
+if(!username){
+  username = prompt("Enter your name");
+  localStorage.setItem("username", username);
+}
+
+// INIT
+const room = getRoom();
+const ref = db.ref("rooms/" + room);
+
+let playerId = Math.random().toString(36).slice(2);
+let role = null;
+let state = {};
+let players = {};
+
+// BUTTONS
+for(let i=0;i<=6;i++){
+ let b=document.createElement("button");
+ b.innerText=i;
+ b.onclick=()=>play(i);
+ buttons.appendChild(b);
+}
+
+// JOIN
+ref.child("players").once("value").then(s=>{
+ let d=s.val()||{};
+
+ if(!d.p1){
+   ref.child("players/p1").set({id:playerId,name:username});
+   role="p1";
+ } else {
+   ref.child("players/p2").set({id:playerId,name:username});
+   role="p2";
+ }
+});
+
+// LISTENER
+ref.on("value",snap=>{
+ let data=snap.val()||{};
+ players=data.players||{};
+ state=data.game||defaultState(data.config);
+
+ render();
+
+ if(role==="p1" && state.batMove!=null && state.bowlMove!=null && !state.matchOver){
+  resolve();
+ }
+
+ if(state.matchOver){
+  alert(state.result);
+  setTimeout(()=>location="index.html",2000);
+ }
+});
+
+// DEFAULT
+function defaultState(config){
+ return{
+  innings:1,score:0,wk:0,ball:0,over:0,target:null,
+  batMove:null,bowlMove:null,batting:"p1",
+  log:[],matchOver:false,
+
+  strikerMode:config?.striker,
+  bowlerMode:config?.bowler,
+
+  batsmen:{
+    striker:{name:"Player A",runs:0,balls:0},
+    nonStriker:{name:"Player B",runs:0,balls:0}
+  },
+
+  bowler:{name:"Bowler",runs:0,wk:0,balls:0}
+ };
+}
+
+// PLAY
+function play(n){
+
+ if(state.matchOver) return;
+
+ if(role===state.batting){
+  if(state.batMove!=null) return;
+  ref.update({"game/batMove":n});
+ }else{
+  if(state.bowlMove!=null) return;
+  ref.update({"game/bowlMove":n});
+ }
+}
+
+// RESOLVE
+function resolve(){
+
+ let bat=Number(state.batMove);
+ let bowl=Number(state.bowlMove);
+ let text="";
+
+ // STRIKER MODE
+ if(state.strikerMode){
+  let s=state.batsmen.striker;
+  s.balls++;
+
+  if(bat===bowl){
+    state.wk++; text="W";
+  }else{
+    state.score+=bat;
+    s.runs+=bat;
+    text=bat;
+
+    if(bat%2===1){
+      [state.batsmen.striker,state.batsmen.nonStriker] =
+      [state.batsmen.nonStriker,state.batsmen.striker];
+    }
+  }
+
+ } else {
+  if(bat===bowl){
+    state.wk++; text="W";
+  }else{
+    state.score+=bat;
+    text=bat;
+  }
+ }
+
+ // BOWLER MODE
+ if(state.bowlerMode){
+  state.bowler.balls++;
+  state.bowler.name = players[state.batting==="p1"?"p2":"p1"]?.name || "Bowler";
+
+  if(bat===bowl){
+    state.bowler.wk++;
+  } else {
+    state.bowler.runs+=bat;
+  }
+ }
+
+ state.log.push(text);
+ if(state.log.length>12) state.log.shift();
+
+ state.ball++;
+ if(state.ball%6===0){
+  state.over++;
+
+  if(state.strikerMode){
+    [state.batsmen.striker,state.batsmen.nonStriker] =
+    [state.batsmen.nonStriker,state.batsmen.striker];
+  }
+ }
+
+ state.batMove=null;
+ state.bowlMove=null;
+
+ checkGame();
+ ref.update({game:state});
+}
+
+// GAME FLOW
+function checkGame(){
+
+ if(state.over>=5 || state.wk===10){
+
+  if(state.innings===1){
+
+    state.target=state.score+1;
+    state.innings=2;
+
+    state.score=0;
+    state.wk=0;
+    state.ball=0;
+    state.over=0;
+    state.log=[];
+
+    state.batting = state.batting==="p1"?"p2":"p1";
+
+  }else{
+    endMatch(false);
+  }
+  return;
+ }
+
+ if(state.innings===2 && state.score>=state.target){
+  endMatch(true);
+ }
+}
+
+// END
+function endMatch(chase){
+ state.matchOver=true;
+
+ let batTeam = players[state.batting]?.name || "Batting Team";
+ let bowlTeam = players[state.batting==="p1"?"p2":"p1"]?.name || "Bowling Team";
+
+ state.result = chase
+   ? batTeam + " CHASED 🏆"
+   : bowlTeam + " DEFENDED 🏆";
+}
+
+// RENDER
+function render(){
+
+ score.innerText=state.score+"/"+state.wk;
+ overs.innerText="Over: "+state.over+"."+state.ball%6;
+
+ let balls=state.ball||1;
+ crr.innerText="CRR: "+(state.score/(balls/6)).toFixed(2);
+
+ if(state.target){
+  let ballsLeft=(5*6)-state.ball;
+  let runsLeft=state.target-state.score;
+  rrr.innerText="RRR: "+(runsLeft/(ballsLeft/6)).toFixed(2);
+  target.innerText="Target: "+state.target;
+ }
+
+ // players
+ playersUI.innerText =
+   "P1: " + (players.p1?.name || "-") +
+   " vs P2: " + (players.p2?.name || "-");
+
+ turn.innerText =
+   role===state.batting ? "Your Bat" : "Your Bowl";
+
+ if(state.strikerMode){
+  strikerUI.innerText =
+    "Striker: " + state.batsmen.striker.name +
+    " (" + state.batsmen.striker.runs + ")";
+ }
+
+ if(state.bowlerMode){
+  bowlerUI.innerText =
+    state.bowler.name + " → " +
+    state.bowler.runs + " runs, " +
+    state.bowler.wk + " wk";
+ }
+
+ log.innerText=state.log.join(" ");
+}
+
+</script>
+
+</body>
+</html>
