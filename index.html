@@ -1,314 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Odd Even IPL Advanced</title>
-
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-
-<style>
-body{background:#0f172a;color:white;text-align:center;font-family:sans-serif}
-.card{background:#1e293b;margin:10px;padding:12px;border-radius:12px}
-button{padding:10px;margin:5px;border:none;border-radius:10px;background:#3b82f6;color:white;cursor:pointer}
-button:active{transform:scale(0.95)}
-.grid{display:grid;grid-template-columns:repeat(6,1fr)}
-.big{font-size:28px;font-weight:bold}
-.log{height:120px;overflow:auto;text-align:left;font-size:12px}
-</style>
+<link rel="stylesheet" href="style.css">
+<title>IPL Home</title>
 </head>
-
 <body>
 
-<h2>🏏 IPL ADVANCED</h2>
+<h2>🏏 IPL GAME</h2>
 
 <div class="card">
-Room: <input id="room">
-<button onclick="join()">Join</button>
-<p id="status"></p>
-<p id="role"></p>
-
-<h4>Settings</h4>
-Overs: <input id="oversInput" type="number" value="5"><br>
-
-<label><input type="checkbox" id="strikerToggle"> Striker System</label><br>
-<label><input type="checkbox" id="bowlerToggle"> Bowler System</label><br>
-
-<button onclick="startMatch()">Start Match</button>
-<button onclick="pauseGame()">Pause</button>
-<button onclick="resumeGame()">Resume</button>
-<button onclick="resetMatch()">Reset</button>
+<button onclick="create()">Create Room</button>
+<button onclick="join()">Join Room</button>
+<button onclick="bot()">Play vs Bot</button>
+<button onclick="tour()">Tournament</button>
 </div>
-
-<div class="card">
-<h3 id="tossText">Toss not done</h3>
-<button onclick="toss()">Toss</button>
-<button onclick="chooseBat()">Bat</button>
-<button onclick="chooseBowl()">Bowl</button>
-</div>
-
-<div class="card">
-<div class="big" id="teamScore">0/0</div>
-<div id="overs"></div>
-<div id="crr"></div>
-<div id="rrr"></div>
-<div id="targetBox"></div>
-<div id="strikerUI"></div>
-<div id="nonStrikerUI"></div>
-<div id="bowlerUI"></div>
-<div id="turn"></div>
-</div>
-
-<div class="card">
-<h4>Ball Log</h4>
-<div id="log" class="log"></div>
-</div>
-
-<div class="grid" id="buttons"></div>
 
 <script>
-
-firebase.initializeApp({
- apiKey:"AIzaSyCrVyYIQk7pgMW05n4gYgTFwcLGZEh3IdI",
- databaseURL:"https://odd-even-cricket-6fcb7-default-rtdb.asia-southeast1.firebasedatabase.app"
-});
-const db=firebase.database();
-
-let role=null, roomRef=null, state={};
-
-// buttons
-for(let i=0;i<=10;i++){
- let b=document.createElement("button");
- b.innerText=i;
- b.onclick=()=>play(i);
- buttons.appendChild(b);
+function create(){
+ let id=Math.random().toString(36).slice(2,7);
+ location="room.html?room="+id;
 }
-
-// join
 function join(){
- let r=room.value;
- roomRef=db.ref("rooms/"+r);
-
- roomRef.once("value").then(s=>{
-  let d=s.val()||{};
-  let u={};
-
-  if(!d.players?.p1){u["players/p1"]="1";role="p1";}
-  else if(!d.players?.p2){u["players/p2"]="1";role="p2";}
-  else return alert("Room full");
-
-  roomRef.update(u);
- });
-
- roomRef.on("value",snap=>{
-  let d=snap.val()||{};
-  state=d.game||{};
-  render();
-
-  if(role==="p1" && state.batMove!=null && state.bowlMove!=null && !state.matchOver && !state.paused){
-    resolve();
-  }
-
-  if(state.matchOver){
-    alert(state.result);
-  }
- });
+ let id=prompt("Enter Room Code");
+ if(id) location="room.html?room="+id;
 }
-
-// start
-function startMatch(){
- let g={
-  innings:1,score:0,wk:0,ball:0,over:0,target:null,
-  batting:null,last6:[],log:[],
-  batMove:null,bowlMove:null,
-  matchOver:false,paused:false,
-  oversLimit:Number(oversInput.value),
-  strikerMode:strikerToggle.checked,
-  bowlerMode:bowlerToggle.checked,
-
-  batsmen:{
-    striker:{runs:0,balls:0},
-    nonStriker:{runs:0,balls:0}
-  },
-
-  bowler:{runs:0,balls:0,wk:0}
- };
- roomRef.update({game:g});
+function bot(){
+ location="match.html?bot=1";
 }
-
-// toss
-function toss(){
- let w=Math.random()<0.5?"p1":"p2";
- state.tossWinner=w;
- tossText.innerText="Toss: "+w;
- roomRef.update({"game/tossWinner":w});
+function tour(){
+ location="tournament.html";
 }
-
-function chooseBat(){
- if(role!==state.tossWinner)return;
- roomRef.update({"game/batting":role});
-}
-
-function chooseBowl(){
- if(role!==state.tossWinner)return;
- roomRef.update({"game/batting":role==="p1"?"p2":"p1"});
-}
-
-// play
-function play(n){
- if(state.matchOver||state.paused)return;
-
- if(role===state.batting){
-  if(state.batMove!=null)return;
-  roomRef.update({"game/batMove":n});
- }else{
-  if(state.bowlMove!=null)return;
-  roomRef.update({"game/bowlMove":n});
- }
-}
-
-// resolve
-function resolve(){
-
- let bat=Number(state.batMove);
- let bowl=Number(state.bowlMove);
- let text="";
-
- // striker mode
- if(state.strikerMode){
-
-  let s=state.batsmen.striker;
-  s.balls++;
-
-  if(bat===bowl){
-    state.wk++; text="WICKET";
-  }else{
-    state.score+=bat;
-    s.runs+=bat;
-    text=bat+" runs";
-
-    if(bat%2===1){
-      [state.batsmen.striker,state.batsmen.nonStriker] =
-      [state.batsmen.nonStriker,state.batsmen.striker];
-    }
-  }
-
- } else {
-
-  if(bat===bowl){
-    state.wk++; text="WICKET";
-  }else{
-    state.score+=bat;
-    text=bat+" runs";
-  }
- }
-
- // bowler mode
- if(state.bowlerMode){
-  state.bowler.balls++;
-  if(bat!==bowl) state.bowler.runs+=bat;
-  else state.bowler.wk++;
- }
-
- state.log.push("Ball "+(state.ball+1)+": "+text);
- if(state.log.length>20) state.log.shift();
-
- state.ball++;
- if(state.ball%6===0){
-  state.over++;
-
-  if(state.strikerMode){
-    [state.batsmen.striker,state.batsmen.nonStriker] =
-    [state.batsmen.nonStriker,state.batsmen.striker];
-  }
- }
-
- state.batMove=null;
- state.bowlMove=null;
-
- checkGame();
- roomRef.update({game:state});
-}
-
-// game logic
-function checkGame(){
-
- if(state.over>=state.oversLimit || state.wk===10){
-
-  if(state.innings===1){
-    state.target=state.score+1;
-    state.innings=2;
-
-    state.score=0;state.wk=0;state.ball=0;state.over=0;state.log=[];
-
-    state.batting = state.batting==="p1"?"p2":"p1";
-
-  }else{
-    endMatch(false);
-  }
-  return;
- }
-
- if(state.innings===2 && state.score>=state.target){
-  endMatch(true);
- }
-}
-
-function endMatch(chase){
- state.matchOver=true;
- state.result=chase?"CHASED 🏆":"DEFENDED 🏆";
- roomRef.update({game:state});
-}
-
-// controls
-function pauseGame(){roomRef.update({"game/paused":true});}
-function resumeGame(){roomRef.update({"game/paused":false});}
-function resetMatch(){roomRef.remove();}
-
-// render
-function render(){
-
- teamScore.innerText=state.score+"/"+state.wk;
- overs.innerText=state.over+"."+state.ball%6;
-
- let balls=state.ball||1;
- let crr=(state.score/(balls/6)).toFixed(2);
- crr.innerText="CRR: "+crr;
-
- if(state.target){
-  let ballsLeft=(state.oversLimit*6)-state.ball;
-  let runsLeft=state.target-state.score;
-  let rrr=(runsLeft/(ballsLeft/6)).toFixed(2);
-  document.getElementById("rrr").innerText="RRR: "+rrr;
- }
-
- targetBox.innerText=state.target?"Target: "+state.target:"";
-
- // striker UI
- if(state.strikerMode){
-  strikerUI.innerText="Striker: "+state.batsmen.striker.runs;
-  nonStrikerUI.innerText="Non-Striker: "+state.batsmen.nonStriker.runs;
- }else{
-  strikerUI.innerText="";
-  nonStrikerUI.innerText="";
- }
-
- // bowler UI
- if(state.bowlerMode){
-  let b=state.bowler;
-  bowlerUI.innerText="Bowler: "+b.runs+" runs | "+b.wk+" wk | "+b.balls+" balls";
- }else{
-  bowlerUI.innerText="";
- }
-
- turn.innerText=
- state.paused?"Paused":
- state.matchOver?"Match Over":
- (role===state.batting?"Bat":"Bowl");
-
- log.innerHTML=(state.log||[]).slice().reverse().join("<br>");
-}
-
 </script>
 
 </body>
