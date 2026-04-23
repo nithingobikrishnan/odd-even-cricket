@@ -1,8 +1,8 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Odd Even IPL Fixed</title>
+<title>Odd Even IPL FINAL</title>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -18,7 +18,7 @@ button{padding:10px;margin:5px;border:none;border-radius:8px;background:#3b82f6;
 
 <body>
 
-<h2>🏏 Odd Even IPL</h2>
+<h2>🏏 Odd Even IPL FINAL</h2>
 
 <div class="card">
 Room: <input id="room">
@@ -30,7 +30,7 @@ Room: <input id="room">
 
 <div class="card">
   <div class="big" id="teamScore">0/0</div>
-  <div id="overs">0.0 overs</div>
+  <div id="overs"></div>
   <div id="crr"></div>
   <div id="targetBox"></div>
   <div id="last6"></div>
@@ -97,6 +97,12 @@ function join(){
   updateStatus(d);
   render();
 
+  // 🏁 MATCH END SYNC (NEW)
+  if(state.matchOver){
+    alert(state.result);
+    return;
+  }
+
   if(role===state.batting && state.batMove!=null && state.bowlMove!=null){
     resolve();
   }
@@ -128,11 +134,13 @@ function defaultState(){
   batMove:null,
   bowlMove:null,
   last6:[],
-  batting:"p1"
+  batting:"p1",
+  matchOver:false,
+  result:""
  };
 }
 
-// FIX NUMBERS
+// FIX
 function fixState(){
  state.score=Number(state.score||0);
  state.wk=Number(state.wk||0);
@@ -141,13 +149,15 @@ function fixState(){
  if(!state.last6) state.last6=[];
 }
 
-// START GAME
+// START
 function startGame(){
  roomRef.update({game:defaultState()});
 }
 
 // PLAY
 function play(n){
+
+ if(state.matchOver) return;
 
  if(role!==state.batting && n===0){
   alert("Bowler no 0");return;
@@ -190,6 +200,7 @@ function resolve(){
  state.bowlMove=null;
 
  checkGame();
+
  roomRef.update({game:state});
 }
 
@@ -225,21 +236,25 @@ function checkGame(){
  }
 }
 
-function endMatch(chase=false){
- alert(chase?"CHASED! 🏆":"DEFENDED! 🏆");
- location.reload();
+// 🏁 FIXED END MATCH
+function endMatch(chase){
+
+ state.matchOver = true;
+
+ state.result = chase
+   ? "🏆 Batting team CHASED!"
+   : "🏆 Bowling team DEFENDED!";
+
+ roomRef.update({game:state});
 }
 
-// RENDER (FIXED)
+// RENDER
 function render(){
 
- document.getElementById("teamScore").innerText =
-   state.score + "/" + state.wk;
+ teamScore.innerText = state.score + "/" + state.wk;
 
- document.getElementById("overs").innerText =
-   state.over + "." + (state.ball % 6) + " overs";
+ overs.innerText = state.over + "." + (state.ball % 6) + " overs";
 
- // ✅ FIXED CRR
  let balls = state.ball || 1;
  let crr = (state.score / (balls/6)).toFixed(2);
  document.getElementById("crr").innerText = "CRR: " + crr;
@@ -248,23 +263,26 @@ function render(){
    let ballsLeft = (5*6) - state.ball;
    let runsLeft = state.target - state.score;
 
-   document.getElementById("targetBox").innerText =
+   targetBox.innerText =
      "Target: " + state.target +
      " | Need: " + runsLeft + " (" + ballsLeft + " balls)";
  } else {
-   document.getElementById("targetBox").innerText="";
+   targetBox.innerText="";
  }
 
- document.getElementById("last6").innerText =
-   "Last: " + state.last6.join(" ");
+ last6.innerText = "Last: " + state.last6.join(" ");
 
- document.getElementById("matchStatus").innerText =
+ matchStatus.innerText =
    state.innings===1 ? "1st Innings" : "Chasing";
 
- document.getElementById("turn").innerText =
-   role===state.batting
-   ? (state.batMove==null?"Your Bat":"Waiting...")
-   : (state.bowlMove==null?"Your Bowl":"Waiting...");
+ if(state.matchOver){
+   turn.innerText = "Match Over";
+ } else {
+   turn.innerText =
+     role===state.batting
+     ? (state.batMove==null?"Your Bat":"Waiting...")
+     : (state.bowlMove==null?"Your Bowl":"Waiting...");
+ }
 }
 
 </script>
