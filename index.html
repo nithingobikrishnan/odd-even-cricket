@@ -2,35 +2,14 @@
 <html>
 <head>
 <link rel="stylesheet" href="style.css">
-<title>IPL Home</title>
 </head>
 <body>
 
-<h2>🏏 IPL GAME</h2>
+<h1>🏏 IPL Cricket</h1>
 
-<div class="card">
-<button onclick="create()">Create Room</button>
-<button onclick="join()">Join Room</button>
-<button onclick="bot()">Play vs Bot</button>
-<button onclick="tour()">Tournament</button>
-</div>
-
-<script>
-function create(){
- let id=Math.random().toString(36).slice(2,7);
- location="room.html?room="+id;
-}
-function join(){
- let id=prompt("Enter Room Code");
- if(id) location="room.html?room="+id;
-}
-function bot(){
- location="match.html?bot=1";
-}
-function tour(){
- location="tournament.html";
-}
-</script>
+<button onclick="location='room.html'">Multiplayer</button>
+<button onclick="location='tournament.html'">Tournament</button>
+<button onclick="location='settings.html'">Settings</button>
 
 </body>
 </html>
