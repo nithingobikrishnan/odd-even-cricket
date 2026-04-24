@@ -2,308 +2,125 @@
 <html>
 <head>
 <link rel="stylesheet" href="style.css">
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-<script src="app.js"></script>
+<script type="module">
+
+import { db, ref, onValue, update } from "./app.js";
+import { resolveBall } from "./engine.js";
+
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
+
+let state;
+let timer;
+
+const gameRef = ref(db,"rooms/"+room);
+
+onValue(gameRef,(snap)=>{
+ let data = snap.val();
+ if(!data || !data.game) return;
+
+ state = data.game;
+
+ render();
+
+ if(state.matchOver){
+  alert("🏆 " + state.winner);
+  localStorage.setItem("lastMatch", JSON.stringify(state));
+  location = "result.html";
+  return;
+ }
+
+ if(state.batMove!=null && state.bowlMove!=null){
+
+  clearTimeout(timer);
+
+  let {state:newState, result} = resolveBall(state);
+
+  showResult(result);
+
+  update(gameRef,{game:newState});
+ }
+});
+
+window.play = function(n){
+
+ if(state.batMove==null){
+  update(gameRef,{ "game/batMove":n });
+  startTimer();
+ } else {
+  update(gameRef,{ "game/bowlMove":n });
+ }
+}
+
+function startTimer(){
+
+ clearTimeout(timer);
+
+ timer = setTimeout(()=>{
+  if(state.bowlMove==null){
+   state.score += 1;
+   update(gameRef,{game:state});
+   alert("⏱️ Extra run!");
+  }
+ },5000);
+}
+
+function showResult(r){
+ if(r==="W"){
+  alert("❌ OUT!");
+ } else {
+  alert("🏏 "+r+" runs");
+ }
+}
+
+function render(){
+
+ document.getElementById("score").innerText =
+  state.score+"/"+state.wk+" ("+state.over+"."+state.ball%6+")";
+
+ document.getElementById("info").innerText =
+  state.innings === 1
+   ? "Innings 1"
+   : "Target: " + state.target;
+
+ // CRR
+ let balls = state.ball || 1;
+ let crr = (state.score / (balls/6)).toFixed(2);
+
+ document.getElementById("crr").innerText = "CRR: " + crr;
+
+ // RRR
+ if(state.innings === 2){
+  let ballsLeft = (state.oversLimit*6) - state.ball;
+  let runsLeft = state.target - state.score;
+
+  let rrr = ballsLeft>0 ? ((runsLeft/(ballsLeft/6))).toFixed(2) : 0;
+
+  document.getElementById("rrr").innerText = "RRR: " + rrr;
+ }
+
+ let btns = document.getElementById("btns");
+ btns.innerHTML="";
+
+ for(let i=0;i<=state.maxNumber;i++){
+  let b=document.createElement("button");
+  b.innerText=i;
+  b.onclick=()=>play(i);
+  btns.appendChild(b);
+ }
+}
+
+</script>
 </head>
 
 <body>
 
-<h2>🏏 FINAL BOSS IPL</h2>
-
-<div class="card">
-<div class="big" id="score">0/0</div>
-<div id="status"></div>
-<div id="overs"></div>
-<div id="target"></div>
+<h2 id="score">Loading...</h2>
+<h3 id="info"></h3>
 <div id="crr"></div>
 <div id="rrr"></div>
 
-<div id="playersUI"></div>
-<div id="strikerUI"></div>
-<div id="bowlerUI"></div>
-</div>
-
-<div class="card">
-<h4>Ball Log</h4>
-<div id="log"></div>
-</div>
-
-<div class="grid" id="buttons"></div>
-
-<script>
-
-// USERNAME
-let username = localStorage.getItem("username");
-if(!username){
-  username = prompt("Enter name") || "Player";
-  localStorage.setItem("username", username);
-}
-
-const params = new URLSearchParams(location.search);
-const room = params.get("room");
-const botMode = params.get("bot");
-
-const ref = room ? db.ref("rooms/" + room) : null;
-
-let role=null, state=null, players={};
-let playerId = Math.random().toString(36).slice(2);
-
-// BUTTONS
-for(let i=0;i<=6;i++){
- let b=document.createElement("button");
- b.innerText=i;
- b.onclick=()=>play(i);
- buttons.appendChild(b);
-}
-
-// DEFAULT STATE
-function defaultState(){
- return{
-  innings:1,score:0,wk:0,ball:0,over:0,target:null,
-  batMove:null,bowlMove:null,
-  batting:"p1",matchOver:false,log:[],
-
-  oversLimit:5,
-  strikerMode:true,
-  bowlerMode:true,
-
-  batsmen:{
-    striker:{name:"Striker",runs:0,balls:0},
-    nonStriker:{name:"Non",runs:0,balls:0}
-  },
-
-  bowlers:[
-    {name:"Bowler1",runs:0,wk:0,balls:0},
-    {name:"Bowler2",runs:0,wk:0,balls:0}
-  ],
-
-  currentBowler:0,
-
-  history:[]
- };
-}
-
-// INIT
-if(ref){
- ref.child("players").once("value").then(s=>{
-  let d=s.val()||{};
-  if(!d.p1){
-    ref.child("players/p1").set({id:playerId,name:username});
-    role="p1";
-  } else {
-    ref.child("players/p2").set({id:playerId,name:username});
-    role="p2";
-  }
- });
-
- ref.on("value",snap=>{
-  let d=snap.val()||{};
-  players=d.players||{};
-  if(!d.game){
-  console.log("Waiting for game init...");
-  return;
-}
-
-state = d.game;
-
-  render();
-
-  if(role==="p1" && state.batMove!=null && state.bowlMove!=null && !state.matchOver){
-    resolve();
-  }
- });
-}else{
- state = defaultState();
- role="p1";
-}
-
-// 🔥 SMART BOT (FINAL VERSION)
-function botMove(){
-
- let h = state.history;
-
- if(h.length<5) return rand();
-
- let last5 = h.slice(-5);
- let freq = {};
-
- last5.forEach(n=>{
-  freq[n]=(freq[n]||0)+1;
- });
-
- let predicted = Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
-
- let pressure = state.target ?
-  (state.target - state.score) / ((state.oversLimit*6)-state.ball) : 1;
-
- if(pressure > 2){
-  return Math.max(0, predicted-1);
- }
-
- return predicted;
-}
-
-function rand(){
- return Math.floor(Math.random()*7);
-}
-
-// PLAY
-function play(n){
-
- if(state.matchOver) return;
-
- if(botMode){
-  state.batMove=n;
-  state.bowlMove=botMove();
-  resolveCore();
-  render();
-  return;
- }
-
- if(role===state.batting){
-  if(state.batMove!=null)return;
-  ref.update({"game/batMove":n});
- }else{
-  if(state.bowlMove!=null)return;
-  ref.update({"game/bowlMove":n});
- }
-}
-
-// RESOLVE
-function resolve(){
- resolveCore();
- ref.update({game:state});
-}
-
-function resolveCore(){
-
- let bat = Number(state.batMove)||0;
- let bowl = Number(state.bowlMove)||0;
-
- let text="";
-
- let s=state.batsmen.striker;
-
- s.balls++;
-
- if(bat===bowl){
-  state.wk++; text="W";
- }else{
-  state.score+=bat;
-  s.runs+=bat;
-  text=bat;
-
-  if(bat%2===1){
-    [state.batsmen.striker,state.batsmen.nonStriker] =
-    [state.batsmen.nonStriker,state.batsmen.striker];
-  }
- }
-
- // bowler
- let bowler = state.bowlers[state.currentBowler];
- bowler.balls++;
-
- if(bat===bowl) bowler.wk++;
- else bowler.runs+=bat;
-
- // AI history
- state.history.push(bat);
- if(state.history.length>10) state.history.shift();
-
- state.log.push(text);
- if(state.log.length>12) state.log.shift();
-
- state.ball++;
-
- if(state.ball%6===0){
-  state.over++;
-
-  // rotate strike
-  [state.batsmen.striker,state.batsmen.nonStriker] =
-  [state.batsmen.nonStriker,state.batsmen.striker];
-
-  // rotate bowler
-  state.currentBowler = (state.currentBowler+1)%state.bowlers.length;
- }
-
- state.batMove=null;
- state.bowlMove=null;
-
- checkGame();
-}
-
-// GAME FLOW
-function checkGame(){
-
- if(state.over>=state.oversLimit || state.wk===10){
-
-  if(state.innings===1){
-
-    state.target=state.score+1;
-    state.innings=2;
-
-    state.score=0;
-    state.wk=0;
-    state.ball=0;
-    state.over=0;
-    state.log=[];
-
-    state.batting = state.batting==="p1"?"p2":"p1";
-
-  }else{
-    finish();
-  }
-  return;
- }
-
- if(state.innings===2 && state.score>=state.target){
-  finish();
- }
-}
-
-function finish(){
- state.matchOver=true;
- alert("Match Finished");
- setTimeout(()=>location="index.html",2000);
-}
-
-// RENDER
-function render(){
-
- score.innerText = state.score+"/"+state.wk;
-
- overs.innerText = "Over: "+state.over+"."+state.ball%6;
-
- let balls = state.ball||1;
- crr.innerText="CRR: "+balls > 0 ? (state.score/(balls/6)).toFixed(2) : "0.00"
- if(state.target){
-  let ballsLeft=(state.oversLimit*6)-state.ball;
-  let runsLeft=state.target-state.score;
-  rrr.innerText="RRR: "+(runsLeft/(ballsLeft/6)).toFixed(2);
-  target.innerText="Target: "+state.target;
- }
-
- playersUI.innerText =
-  (players.p1?.name||"P1")+" vs "+(players.p2?.name||"P2");
-
- strikerUI.innerText =
-  "Striker: "+state.batsmen.striker.runs+
-  " | Non: "+state.batsmen.nonStriker.runs;
-
- let b = state.bowlers[state.currentBowler];
- bowlerUI.innerText =
-  b.name+" → "+b.runs+"/"+b.wk;
-
- status.innerText =
-  state.matchOver ? "MATCH OVER" :
-  (botMode ? "VS AI" :
-  (role===state.batting?"YOU BATTING":"YOU BOWLING"));
-
- log.innerText = state.log.join(" ");
-}
-
-</script>
+<div id="btns"></div>
 
 </body>
 </html>
