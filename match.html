@@ -2,39 +2,83 @@
 <html>
 <body>
 
-<h2 id="status">Loading...</h2>
+<h2 id="status">Connecting...</h2>
 <h3 id="score">0</h3>
-<button onclick="add()">Click Me</button>
+<h3 id="info"></h3>
+
+<div id="buttons"></div>
 
 <script type="module">
 
 import { db, ref, set, onValue, update } from "./app.js";
 
-const room = "test123"; // fixed room
+const room = "test123"; // same room
 
 const status = document.getElementById("status");
 const score = document.getElementById("score");
+const info = document.getElementById("info");
+const buttons = document.getElementById("buttons");
 
 const gameRef = ref(db, "rooms/" + room);
 
-// create room if not exists
-set(gameRef, { score: 0 }).catch(()=>{});
+// INITIAL STATE
+set(gameRef, {
+ score: 0,
+ batMove: null,
+ bowlMove: null
+}).catch(()=>{});
 
-// listen for updates
+// LISTEN
 onValue(gameRef, (snap)=>{
  let data = snap.val();
  if(!data) return;
 
  status.innerText = "Connected";
- score.innerText = data.score;
+ score.innerText = "Score: " + data.score;
+
+ info.innerText = 
+  "Bat: " + data.batMove + 
+  " | Bowl: " + data.bowlMove;
+
+ // resolve turn
+ if(data.batMove !== null && data.bowlMove !== null){
+  let bat = Number(data.batMove);
+  let bowl = Number(data.bowlMove);
+
+  let newScore = data.score;
+
+  if(bat !== bowl){
+   newScore += bat;
+  } else {
+   alert("WICKET!");
+  }
+
+  // reset turn
+  update(gameRef, {
+   score: newScore,
+   batMove: null,
+   bowlMove: null
+  });
+ }
 });
 
-// button click
-window.add = function(){
- update(gameRef, {
-  score: Math.floor(Math.random()*100)
- });
+// PLAY
+window.play = function(n){
+
+ // randomly act as bat or bowl (for test)
+ if(Math.random() > 0.5){
+  update(gameRef, { batMove: n });
+ } else {
+  update(gameRef, { bowlMove: n });
+ }
 };
+
+// BUTTONS
+let btn = "";
+for(let i=0;i<=6;i++){
+ btn += `<button onclick="play(${i})">${i}</button>`;
+}
+buttons.innerHTML = btn;
 
 </script>
 
