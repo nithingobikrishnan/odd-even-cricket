@@ -2,12 +2,13 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>IPL Match</title>
-
 <style>
-body{background:#111;color:white;text-align:center;font-family:sans-serif}
-button{padding:10px;margin:5px;background:#222;color:white;border:none}
-#score{font-size:28px;font-weight:bold}
+body{background:#0f172a;color:white;text-align:center;font-family:sans-serif}
+button{padding:10px;margin:5px;background:#1e293b;color:white;border:none;border-radius:6px}
+#top{background:#020617;padding:10px}
+#banner{font-size:20px;color:#22c55e;margin:10px}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);max-width:400px;margin:auto}
+.card{background:#1e293b;margin:10px;padding:10px;border-radius:8px}
 </style>
 
 <script type="module">
@@ -21,120 +22,192 @@ const room = params.get("room");
 const bot = params.get("bot");
 
 let state = createGame();
-let gameRef = room ? ref(db,"rooms/"+room) : null;
-let timer;
 
-// DOM FIX (no undefined)
+// 🧠 IPL TEAM SYSTEM
+state.team = Array.from({length:11},(_,i)=>({
+ name:"P"+(i+1),runs:0,balls:0
+}));
+
+state.bench=[{name:"Impact1"},{name:"Impact2"}];
+state.striker=0;
+state.nonStriker=1;
+state.nextBatsman=2;
+state.impactUsed=false;
+
+let gameRef = room ? ref(db,"rooms/"+room) : null;
+
+// DOM
 const score = document.getElementById("score");
 const info = document.getElementById("info");
+const banner = document.getElementById("banner");
 const buttons = document.getElementById("buttons");
-const crrEl = document.getElementById("crrEl");
-const rrrEl = document.getElementById("rrrEl");
+const scorecard = document.getElementById("scorecard");
+const crrEl = document.getElementById("crr");
+const rrrEl = document.getElementById("rrr");
 
-// MULTIPLAYER LISTENER
+// SYNC
 if(room){
  onValue(gameRef,(snap)=>{
-  let data = snap.val();
+  let data=snap.val();
   if(!data) return;
-
-  state = data.game;
+  state=data.game;
   render();
-  processTurn();
+  process();
  });
 }
 
-// PLAY FUNCTION
-window.play = function(n){
+// PLAY
+window.play=function(n){
 
  if(state.matchOver) return;
 
- if(state.batMove == null){
+ if(state.batMove==null){
+  state.batMove=n;
 
-  state.batMove = n;
-  startTimer();
-
-  // BOT MODE ONLY
   if(bot){
-   setTimeout(()=>{
-    state.bowlMove = botMove(state);
-    processTurn();
-   }, 400);
+   state.bowlMove=botMove(state);
+   process();
   }
 
  } else {
-
-  state.bowlMove = n;
-  processTurn();
+  state.bowlMove=n;
+  process();
  }
 
- // ONLY multiplayer updates Firebase
  if(room){
   update(gameRef,{game:state});
  }
 };
 
-// TURN LOGIC
-function processTurn(){
+// TURN
+function process(){
 
- if(state.batMove != null && state.bowlMove != null){
+ if(state.batMove!=null && state.bowlMove!=null){
 
-  clearTimeout(timer);
+  let bat=Number(state.batMove)||0;
+  let bowl=Number(state.bowlMove)||0;
 
-  let res = resolveBall(state);
-  state = res.state;
+  let striker=state.team[state.striker];
+  striker.balls++;
+
+  if(bat===bowl){
+   state.wk++;
+   banner.innerText="❌ WICKET";
+
+   if(state.nextBatsman<state.team.length){
+    state.striker=state.nextBatsman++;
+   }
+
+  } else {
+   striker.runs+=bat;
+   state.score+=bat;
+   banner.innerText="🏏 "+bat+" RUNS";
+
+   if(bat%2===1){
+    swap();
+   }
+  }
+
+  state.ball++;
+  if(state.ball%6===0){
+   state.over++;
+   swap();
+  }
+
+  inningsLogic();
+
+  state.batMove=null;
+  state.bowlMove=null;
 
   render();
+ }
+}
 
-  if(state.matchOver){
-   alert("🏆 "+state.winner);
-   localStorage.setItem("lastMatch", JSON.stringify(state));
-   location = "result.html";
+function swap(){
+ let t=state.striker;
+ state.striker=state.nonStriker;
+ state.nonStriker=t;
+}
+
+// INNINGS
+function inningsLogic(){
+
+ if(state.innings===1 && (state.over>=state.oversLimit || state.wk>=10)){
+  state.target=state.score+1;
+
+  state.innings=2;
+  state.score=0;
+  state.wk=0;
+  state.ball=0;
+  state.over=0;
+
+  state.striker=0;
+  state.nonStriker=1;
+  state.nextBatsman=2;
+
+  alert("CHASE "+state.target);
+ }
+
+ if(state.innings===2){
+  if(state.score>=state.target){
+   end("CHASED");
+  }
+  if(state.over>=state.oversLimit || state.wk>=10){
+   if(state.score>=state.target){
+    end("CHASED");
+   } else {
+    end("DEFENDED");
+   }
   }
  }
 }
 
-// TIMER
-function startTimer(){
- clearTimeout(timer);
-
- timer = setTimeout(()=>{
-  if(state.bowlMove == null){
-   state.score += 1;
-   alert("⏱️ Extra run");
-   render();
-  }
- },5000);
+function end(r){
+ state.matchOver=true;
+ alert("🏆 "+r);
+ location="result.html";
 }
 
-// RENDER UI
+// IMPACT
+window.impact=function(){
+ if(state.impactUsed) return alert("Used");
+
+ let idx=prompt("Replace player index 0-10");
+ if(idx>=0 && idx<11){
+  state.team[idx]=state.bench[0];
+  state.impactUsed=true;
+  render();
+ }
+};
+
+// UI
 function render(){
 
- score.innerText = `${state.score}/${state.wk} (${state.over}.${state.ball%6})`;
+ score.innerText=`${state.score}/${state.wk} (${state.over}.${state.ball%6})`;
+ info.innerText=state.innings===1?"Innings 1":"Target "+state.target;
 
- info.innerText = state.innings === 1
-  ? "Innings 1"
-  : "Target: " + state.target;
+ let balls=state.ball||1;
+ let crr=(state.score/(balls/6)).toFixed(2);
+ crrEl.innerText="CRR "+crr;
 
- // CRR
- let balls = state.ball || 1;
- let crr = (state.score/(balls/6)).toFixed(2);
- crrEl.innerText = "CRR: " + crr;
-
- // RRR
- if(state.innings === 2){
-  let ballsLeft = (state.oversLimit*6) - state.ball;
-  let runsLeft = state.target - state.score;
-
-  let rrr = ballsLeft>0 ? (runsLeft/(ballsLeft/6)).toFixed(2) : 0;
-  rrrEl.innerText = "RRR: " + rrr;
+ if(state.innings===2){
+  let bl=(state.oversLimit*6)-state.ball;
+  let rl=state.target-state.score;
+  let rrr=bl>0?(rl/(bl/6)).toFixed(2):0;
+  rrrEl.innerText="RRR "+rrr;
  }
 
- // BUTTONS
- let btnHTML = "";
- for(let i=0;i<=state.maxNumber;i++){
-  btnHTML += `<button onclick="play(${i})">${i}</button>`;
+ let btn="";
+ for(let i=0;i<=6;i++){
+  btn+=`<button onclick="play(${i})">${i}</button>`;
  }
- buttons.innerHTML = btnHTML;
+ buttons.innerHTML=btn;
+
+ let sc="";
+ state.team.forEach((p,i)=>{
+  sc+=`${i===state.striker?"⭐":""}${p.name} ${p.runs}(${p.balls})<br>`;
+ });
+ scorecard.innerHTML=sc;
 }
 
 </script>
@@ -142,13 +215,23 @@ function render(){
 
 <body>
 
+<div id="top">
 <h2 id="score"></h2>
 <h3 id="info"></h3>
+<div id="crr"></div>
+<div id="rrr"></div>
+</div>
 
-<div id="crrEl"></div>
-<div id="rrrEl"></div>
+<div id="banner"></div>
 
-<div id="buttons"></div>
+<div class="grid" id="buttons"></div>
+
+<button onclick="impact()">Impact Sub</button>
+
+<div class="card">
+<h3>Scorecard</h3>
+<div id="scorecard"></div>
+</div>
 
 </body>
 </html>
