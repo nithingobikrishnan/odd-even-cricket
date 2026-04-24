@@ -2,56 +2,15 @@
 <html>
 <body>
 
-<h2>🏆 Tournament</h2>
+<h2>Tournament</h2>
 
 <button onclick="start()">Start</button>
-<button onclick="next()">Next Match</button>
-
-<div id="table"></div>
 
 <script>
 
 function start(){
-
- let T = {
-  teams:[
-   {name:"You",pts:0},
-   {name:"AI1",pts:0},
-   {name:"AI2",pts:0},
-   {name:"AI3",pts:0},
-   {name:"AI4",pts:0}
-  ],
-  matches:[],
-  current:0
- };
-
- for(let i=0;i<5;i++){
-  for(let j=i+1;j<5;j++){
-   T.matches.push([i,j]);
-  }
- }
-
- localStorage.setItem("T",JSON.stringify(T));
- render();
+ alert("Tournament logic ready to expand");
 }
-
-function next(){
- location="match.html";
-}
-
-function render(){
- let T = JSON.parse(localStorage.getItem("T"));
- if(!T) return;
-
- table.innerHTML="";
- T.teams.forEach(t=>{
-  let d=document.createElement("div");
-  d.innerText=t.name+" "+t.pts;
-  table.appendChild(d);
- });
-}
-
-render();
 
 </script>
 
