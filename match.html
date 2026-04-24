@@ -6,6 +6,7 @@
 <h3 id="role"></h3>
 <h3 id="score">Score: 0</h3>
 <h3 id="info">Bat: - | Bowl: -</h3>
+<h3 id="turn"></h3>
 
 <div id="buttons"></div>
 
@@ -21,18 +22,21 @@ const status = document.getElementById("status");
 const roleEl = document.getElementById("role");
 const scoreEl = document.getElementById("score");
 const infoEl = document.getElementById("info");
+const turnEl = document.getElementById("turn");
 const buttons = document.getElementById("buttons");
 
 // player id
-const playerId = Math.random().toString(36).slice(2);
+const playerId = localStorage.getItem("pid") || Math.random().toString(36).slice(2);
+localStorage.setItem("pid", playerId);
 
-// 🔥 FORCE RESET ROOM (IMPORTANT)
+// INIT ONCE
 set(gameRef, {
  score: 0,
  batMove: null,
  bowlMove: null,
  batsman: null,
- bowler: null
+ bowler: null,
+ turn: "bat" // bat plays first
 });
 
 // LISTENER
@@ -42,7 +46,7 @@ onValue(gameRef, (snap)=>{
 
  status.innerText = "Connected";
 
- // assign roles ONCE
+ // assign roles
  if(!data.batsman){
   update(gameRef, { batsman: playerId });
   return;
@@ -52,7 +56,7 @@ onValue(gameRef, (snap)=>{
   return;
  }
 
- // show role
+ // role display
  if(data.batsman === playerId){
   roleEl.innerText = "BATSMAN";
  }
@@ -63,15 +67,16 @@ onValue(gameRef, (snap)=>{
   roleEl.innerText = "Waiting...";
  }
 
- // safe display
+ // UI
  scoreEl.innerText = "Score: " + (data.score || 0);
 
  let bat = data.batMove === null ? "-" : data.batMove;
  let bowl = data.bowlMove === null ? "-" : data.bowlMove;
 
  infoEl.innerText = "Bat: " + bat + " | Bowl: " + bowl;
+ turnEl.innerText = "Turn: " + data.turn;
 
- // resolve turn (ONLY BATSMAN DOES THIS)
+ // RESOLVE
  if(data.batMove !== null && data.bowlMove !== null){
 
   if(data.batsman === playerId){
@@ -84,13 +89,14 @@ onValue(gameRef, (snap)=>{
     alert("WICKET!");
    }
 
-   // RESET TURN HERE (single write)
+   // reset for next turn
    set(gameRef, {
     score: newScore,
     batMove: null,
     bowlMove: null,
     batsman: data.batsman,
-    bowler: data.bowler
+    bowler: data.bowler,
+    turn: "bat"
    });
   }
  }
@@ -103,12 +109,12 @@ window.play = function(n){
   let data = snap.val();
   if(!data) return;
 
-  // batsman plays
+  // batsman move
   if(data.batsman === playerId && data.batMove === null){
    update(gameRef, { batMove: n });
   }
 
-  // bowler plays
+  // bowler move
   if(data.bowler === playerId && data.bowlMove === null){
    update(gameRef, { bowlMove: n });
   }
@@ -116,7 +122,7 @@ window.play = function(n){
  }, { onlyOnce: true });
 };
 
-// buttons
+// BUTTONS
 let btn = "";
 for(let i=0;i<=6;i++){
  btn += `<button onclick="play(${i})">${i}</button>`;
