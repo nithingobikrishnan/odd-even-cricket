@@ -1,61 +1,40 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8">
-<title>Multiplayer Test</title>
-</head>
-
 <body>
 
-<h2 id="status">Connecting...</h2>
+<h2 id="status">Loading...</h2>
 <h3 id="score">0</h3>
-<div id="buttons"></div>
+<button onclick="add()">Click Me</button>
 
 <script type="module">
 
 import { db, ref, set, onValue, update } from "./app.js";
 
-const params = new URLSearchParams(location.search);
-const room = params.get("room");
+const room = "test123"; // fixed room
 
-const statusEl = document.getElementById("status");
-const scoreEl = document.getElementById("score");
-const buttonsEl = document.getElementById("buttons");
-
-if(!room){
- statusEl.innerText = "No room ID!";
- throw new Error("No room");
-}
+const status = document.getElementById("status");
+const score = document.getElementById("score");
 
 const gameRef = ref(db, "rooms/" + room);
 
-// INIT ROOM (only if empty)
-set(gameRef, {
- score: 0
-}).catch(()=>{});
+// create room if not exists
+set(gameRef, { score: 0 }).catch(()=>{});
 
-// LISTEN
+// listen for updates
 onValue(gameRef, (snap)=>{
  let data = snap.val();
  if(!data) return;
 
- statusEl.innerText = "Connected";
- scoreEl.innerText = "Score: " + data.score;
+ status.innerText = "Connected";
+ score.innerText = data.score;
 });
 
-// CLICK
-window.play = function(n){
+// button click
+window.add = function(){
  update(gameRef, {
-  score: (Math.random()*100)|0 // just test sync
+  score: Math.floor(Math.random()*100)
  });
 };
-
-// BUTTONS
-let btn = "";
-for(let i=0;i<=6;i++){
- btn += `<button onclick="play(${i})">${i}</button>`;
-}
-buttonsEl.innerHTML = btn;
 
 </script>
 
