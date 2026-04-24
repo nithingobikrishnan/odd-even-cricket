@@ -100,7 +100,12 @@ if(ref){
  ref.on("value",snap=>{
   let d=snap.val()||{};
   players=d.players||{};
-  state=d.game || defaultState();
+  if(!d.game){
+  console.log("Waiting for game init...");
+  return;
+}
+
+state = d.game;
 
   render();
 
