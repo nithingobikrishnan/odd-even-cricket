@@ -9,15 +9,15 @@
 
 <body>
 
-<h2>🏏 IPL MATCH</h2>
+<h2>🏏 FINAL BOSS IPL</h2>
 
 <div class="card">
 <div class="big" id="score">0/0</div>
+<div id="status"></div>
 <div id="overs"></div>
 <div id="target"></div>
 <div id="crr"></div>
 <div id="rrr"></div>
-<div id="turn"></div>
 
 <div id="playersUI"></div>
 <div id="strikerUI"></div>
@@ -33,21 +33,21 @@
 
 <script>
 
-// 🔥 USERNAME SYSTEM
+// USERNAME
 let username = localStorage.getItem("username");
 if(!username){
-  username = prompt("Enter your name");
+  username = prompt("Enter name") || "Player";
   localStorage.setItem("username", username);
 }
 
-// INIT
-const room = getRoom();
-const ref = db.ref("rooms/" + room);
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
+const botMode = params.get("bot");
 
+const ref = room ? db.ref("rooms/" + room) : null;
+
+let role=null, state=null, players={};
 let playerId = Math.random().toString(36).slice(2);
-let role = null;
-let state = {};
-let players = {};
 
 // BUTTONS
 for(let i=0;i<=6;i++){
@@ -57,54 +57,90 @@ for(let i=0;i<=6;i++){
  buttons.appendChild(b);
 }
 
-// JOIN
-ref.child("players").once("value").then(s=>{
- let d=s.val()||{};
-
- if(!d.p1){
-   ref.child("players/p1").set({id:playerId,name:username});
-   role="p1";
- } else {
-   ref.child("players/p2").set({id:playerId,name:username});
-   role="p2";
- }
-});
-
-// LISTENER
-ref.on("value",snap=>{
- let data=snap.val()||{};
- players=data.players||{};
- state=data.game||defaultState(data.config);
-
- render();
-
- if(role==="p1" && state.batMove!=null && state.bowlMove!=null && !state.matchOver){
-  resolve();
- }
-
- if(state.matchOver){
-  alert(state.result);
-  setTimeout(()=>location="index.html",2000);
- }
-});
-
-// DEFAULT
-function defaultState(config){
+// DEFAULT STATE
+function defaultState(){
  return{
   innings:1,score:0,wk:0,ball:0,over:0,target:null,
-  batMove:null,bowlMove:null,batting:"p1",
-  log:[],matchOver:false,
+  batMove:null,bowlMove:null,
+  batting:"p1",matchOver:false,log:[],
 
-  strikerMode:config?.striker,
-  bowlerMode:config?.bowler,
+  oversLimit:5,
+  strikerMode:true,
+  bowlerMode:true,
 
   batsmen:{
-    striker:{name:"Player A",runs:0,balls:0},
-    nonStriker:{name:"Player B",runs:0,balls:0}
+    striker:{name:"Striker",runs:0,balls:0},
+    nonStriker:{name:"Non",runs:0,balls:0}
   },
 
-  bowler:{name:"Bowler",runs:0,wk:0,balls:0}
+  bowlers:[
+    {name:"Bowler1",runs:0,wk:0,balls:0},
+    {name:"Bowler2",runs:0,wk:0,balls:0}
+  ],
+
+  currentBowler:0,
+
+  history:[]
  };
+}
+
+// INIT
+if(ref){
+ ref.child("players").once("value").then(s=>{
+  let d=s.val()||{};
+  if(!d.p1){
+    ref.child("players/p1").set({id:playerId,name:username});
+    role="p1";
+  } else {
+    ref.child("players/p2").set({id:playerId,name:username});
+    role="p2";
+  }
+ });
+
+ ref.on("value",snap=>{
+  let d=snap.val()||{};
+  players=d.players||{};
+  state=d.game || defaultState();
+
+  render();
+
+  if(role==="p1" && state.batMove!=null && state.bowlMove!=null && !state.matchOver){
+    resolve();
+  }
+ });
+}else{
+ state = defaultState();
+ role="p1";
+}
+
+// 🔥 SMART BOT (FINAL VERSION)
+function botMove(){
+
+ let h = state.history;
+
+ if(h.length<5) return rand();
+
+ let last5 = h.slice(-5);
+ let freq = {};
+
+ last5.forEach(n=>{
+  freq[n]=(freq[n]||0)+1;
+ });
+
+ let predicted = Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0];
+
+ let pressure = state.target ?
+  (state.target - state.score) / ((state.oversLimit*6)-state.ball) : 1;
+
+ if(pressure > 2){
+  return Math.max(0, predicted-1);
+ }
+
+ return predicted;
+}
+
+function rand(){
+ return Math.floor(Math.random()*7);
 }
 
 // PLAY
@@ -112,85 +148,90 @@ function play(n){
 
  if(state.matchOver) return;
 
+ if(botMode){
+  state.batMove=n;
+  state.bowlMove=botMove();
+  resolveCore();
+  render();
+  return;
+ }
+
  if(role===state.batting){
-  if(state.batMove!=null) return;
+  if(state.batMove!=null)return;
   ref.update({"game/batMove":n});
  }else{
-  if(state.bowlMove!=null) return;
+  if(state.bowlMove!=null)return;
   ref.update({"game/bowlMove":n});
  }
 }
 
 // RESOLVE
 function resolve(){
+ resolveCore();
+ ref.update({game:state});
+}
 
- let bat=Number(state.batMove);
- let bowl=Number(state.bowlMove);
+function resolveCore(){
+
+ let bat = Number(state.batMove)||0;
+ let bowl = Number(state.bowlMove)||0;
+
  let text="";
 
- // STRIKER MODE
- if(state.strikerMode){
-  let s=state.batsmen.striker;
-  s.balls++;
+ let s=state.batsmen.striker;
 
-  if(bat===bowl){
-    state.wk++; text="W";
-  }else{
-    state.score+=bat;
-    s.runs+=bat;
-    text=bat;
+ s.balls++;
 
-    if(bat%2===1){
-      [state.batsmen.striker,state.batsmen.nonStriker] =
-      [state.batsmen.nonStriker,state.batsmen.striker];
-    }
-  }
+ if(bat===bowl){
+  state.wk++; text="W";
+ }else{
+  state.score+=bat;
+  s.runs+=bat;
+  text=bat;
 
- } else {
-  if(bat===bowl){
-    state.wk++; text="W";
-  }else{
-    state.score+=bat;
-    text=bat;
+  if(bat%2===1){
+    [state.batsmen.striker,state.batsmen.nonStriker] =
+    [state.batsmen.nonStriker,state.batsmen.striker];
   }
  }
 
- // BOWLER MODE
- if(state.bowlerMode){
-  state.bowler.balls++;
-  state.bowler.name = players[state.batting==="p1"?"p2":"p1"]?.name || "Bowler";
+ // bowler
+ let bowler = state.bowlers[state.currentBowler];
+ bowler.balls++;
 
-  if(bat===bowl){
-    state.bowler.wk++;
-  } else {
-    state.bowler.runs+=bat;
-  }
- }
+ if(bat===bowl) bowler.wk++;
+ else bowler.runs+=bat;
+
+ // AI history
+ state.history.push(bat);
+ if(state.history.length>10) state.history.shift();
 
  state.log.push(text);
  if(state.log.length>12) state.log.shift();
 
  state.ball++;
+
  if(state.ball%6===0){
   state.over++;
 
-  if(state.strikerMode){
-    [state.batsmen.striker,state.batsmen.nonStriker] =
-    [state.batsmen.nonStriker,state.batsmen.striker];
-  }
+  // rotate strike
+  [state.batsmen.striker,state.batsmen.nonStriker] =
+  [state.batsmen.nonStriker,state.batsmen.striker];
+
+  // rotate bowler
+  state.currentBowler = (state.currentBowler+1)%state.bowlers.length;
  }
 
  state.batMove=null;
  state.bowlMove=null;
 
  checkGame();
- ref.update({game:state});
 }
 
 // GAME FLOW
 function checkGame(){
 
- if(state.over>=5 || state.wk===10){
+ if(state.over>=state.oversLimit || state.wk===10){
 
   if(state.innings===1){
 
@@ -206,66 +247,56 @@ function checkGame(){
     state.batting = state.batting==="p1"?"p2":"p1";
 
   }else{
-    endMatch(false);
+    finish();
   }
   return;
  }
 
  if(state.innings===2 && state.score>=state.target){
-  endMatch(true);
+  finish();
  }
 }
 
-// END
-function endMatch(chase){
+function finish(){
  state.matchOver=true;
-
- let batTeam = players[state.batting]?.name || "Batting Team";
- let bowlTeam = players[state.batting==="p1"?"p2":"p1"]?.name || "Bowling Team";
-
- state.result = chase
-   ? batTeam + " CHASED 🏆"
-   : bowlTeam + " DEFENDED 🏆";
+ alert("Match Finished");
+ setTimeout(()=>location="index.html",2000);
 }
 
 // RENDER
 function render(){
 
- score.innerText=state.score+"/"+state.wk;
- overs.innerText="Over: "+state.over+"."+state.ball%6;
+ score.innerText = state.score+"/"+state.wk;
 
- let balls=state.ball||1;
+ overs.innerText = "Over: "+state.over+"."+state.ball%6;
+
+ let balls = state.ball||1;
  crr.innerText="CRR: "+(state.score/(balls/6)).toFixed(2);
 
  if(state.target){
-  let ballsLeft=(5*6)-state.ball;
+  let ballsLeft=(state.oversLimit*6)-state.ball;
   let runsLeft=state.target-state.score;
   rrr.innerText="RRR: "+(runsLeft/(ballsLeft/6)).toFixed(2);
   target.innerText="Target: "+state.target;
  }
 
- // players
  playersUI.innerText =
-   "P1: " + (players.p1?.name || "-") +
-   " vs P2: " + (players.p2?.name || "-");
+  (players.p1?.name||"P1")+" vs "+(players.p2?.name||"P2");
 
- turn.innerText =
-   role===state.batting ? "Your Bat" : "Your Bowl";
+ strikerUI.innerText =
+  "Striker: "+state.batsmen.striker.runs+
+  " | Non: "+state.batsmen.nonStriker.runs;
 
- if(state.strikerMode){
-  strikerUI.innerText =
-    "Striker: " + state.batsmen.striker.name +
-    " (" + state.batsmen.striker.runs + ")";
- }
+ let b = state.bowlers[state.currentBowler];
+ bowlerUI.innerText =
+  b.name+" → "+b.runs+"/"+b.wk;
 
- if(state.bowlerMode){
-  bowlerUI.innerText =
-    state.bowler.name + " → " +
-    state.bowler.runs + " runs, " +
-    state.bowler.wk + " wk";
- }
+ status.innerText =
+  state.matchOver ? "MATCH OVER" :
+  (botMode ? "VS AI" :
+  (role===state.batting?"YOU BATTING":"YOU BOWLING"));
 
- log.innerText=state.log.join(" ");
+ log.innerText = state.log.join(" ");
 }
 
 </script>
