@@ -1,20 +1,22 @@
-export function createGame(config){
+export function createGame(){
  return {
   innings:1,
   score:0,
   wk:0,
   ball:0,
   over:0,
-
   target:null,
-  matchOver:false,
-  winner:null,
 
-  oversLimit: config.overs || 2,
-  maxNumber: config.maxNumber || 10,
+  oversLimit:2,
+  maxNumber:10,
 
   batMove:null,
-  bowlMove:null
+  bowlMove:null,
+
+  history:[],
+
+  matchOver:false,
+  winner:null
  };
 }
 
@@ -33,48 +35,41 @@ export function resolveBall(state){
   result = bat;
  }
 
+ state.history.push(bat);
+ if(state.history.length>10) state.history.shift();
+
  state.ball++;
+ if(state.ball % 6 === 0) state.over++;
 
- if(state.ball % 6 === 0){
-  state.over++;
+ // innings switch
+ if(state.innings===1 && (state.over>=state.oversLimit || state.wk>=10)){
+  state.target = state.score+1;
+
+  state.innings=2;
+  state.score=0;
+  state.wk=0;
+  state.ball=0;
+  state.over=0;
  }
 
- // 🧠 INNINGS SWITCH
- if(state.innings === 1){
-
-  if(state.over >= state.oversLimit || state.wk >= 10){
-
-   state.target = state.score + 1;
-
-   state.innings = 2;
-   state.score = 0;
-   state.wk = 0;
-   state.ball = 0;
-   state.over = 0;
+ // match end
+ if(state.innings===2){
+  if(state.score>=state.target){
+    state.matchOver=true;
+    state.winner="CHASED";
   }
-
- } else {
-
-  // 🏁 MATCH END CONDITIONS
-
-  if(state.score >= state.target){
-   state.matchOver = true;
-   state.winner = "CHASE SUCCESS";
-  }
-
-  if(state.over >= state.oversLimit || state.wk >= 10){
-   state.matchOver = true;
-
-   if(state.score >= state.target){
-     state.winner = "CHASE SUCCESS";
-   } else {
-     state.winner = "DEFENDED";
-   }
+  if(state.over>=state.oversLimit || state.wk>=10){
+    state.matchOver=true;
+    if(state.score>=state.target){
+      state.winner="CHASED";
+    } else {
+      state.winner="DEFENDED";
+    }
   }
  }
 
- state.batMove = null;
- state.bowlMove = null;
+ state.batMove=null;
+ state.bowlMove=null;
 
- return {state, result};
+ return {state,result};
 }
