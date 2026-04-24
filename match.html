@@ -3,11 +3,8 @@
 <body>
 
 <h2 id="status">Loading...</h2>
-<h3 id="role"></h3>
-<h3 id="score"></h3>
-<h3 id="info"></h3>
-
-<div id="buttons"></div>
+<h3 id="score">0</h3>
+<button onclick="add()">Click</button>
 
 <script type="module">
 
@@ -16,117 +13,27 @@ import { db, ref, set, onValue, update } from "./app.js";
 const room = "test123";
 const gameRef = ref(db, "rooms/" + room);
 
-// DOM
 const status = document.getElementById("status");
-const roleEl = document.getElementById("role");
-const scoreEl = document.getElementById("score");
-const infoEl = document.getElementById("info");
-const buttons = document.getElementById("buttons");
+const score = document.getElementById("score");
 
-// player id
-const playerId = localStorage.getItem("pid") || Math.random().toString(36).slice(2);
-localStorage.setItem("pid", playerId);
+// create room
+set(gameRef, { score: 0 }).catch(()=>{});
 
-// 🔥 SAFE NORMALIZER (KEY FIX)
-function normalize(d){
- return {
-  score: d?.score ?? 0,
-  batMove: d?.batMove ?? null,
-  bowlMove: d?.bowlMove ?? null,
-  batsman: d?.batsman ?? null,
-  bowler: d?.bowler ?? null
- };
-}
-
-// INIT (ONLY ONCE SAFE)
-set(gameRef, normalize({}));
-
-// LISTENER
+// listen
 onValue(gameRef, (snap)=>{
-
- let raw = snap.val();
- if(!raw) return;
-
- let data = normalize(raw); // 🔥 ALWAYS SAFE DATA
+ let data = snap.val();
+ if(!data) return;
 
  status.innerText = "Connected";
-
- // assign roles
- if(!data.batsman){
-  update(gameRef, { batsman: playerId });
-  return;
- }
- if(!data.bowler && data.batsman !== playerId){
-  update(gameRef, { bowler: playerId });
-  return;
- }
-
- // role
- if(data.batsman === playerId){
-  roleEl.innerText = "BATSMAN";
- }
- else if(data.bowler === playerId){
-  roleEl.innerText = "BOWLER";
- }
- else {
-  roleEl.innerText = "Waiting...";
- }
-
- // SAFE UI (NO undefined possible)
- scoreEl.innerText = "Score: " + data.score;
-
- let bat = data.batMove === null ? "-" : data.batMove;
- let bowl = data.bowlMove === null ? "-" : data.bowlMove;
-
- infoEl.innerText = "Bat: " + bat + " | Bowl: " + bowl;
-
- // RESOLVE
- if(data.batMove !== null && data.bowlMove !== null){
-
-  if(data.batsman === playerId){
-
-   let newScore = data.score;
-
-   if(data.batMove !== data.bowlMove){
-    newScore += Number(data.batMove);
-   } else {
-    alert("WICKET!");
-   }
-
-   set(gameRef, {
-    score: newScore,
-    batMove: null,
-    bowlMove: null,
-    batsman: data.batsman,
-    bowler: data.bowler
-   });
-  }
- }
+ score.innerText = data.score;
 });
 
-// PLAY
-window.play = function(n){
-
- onValue(gameRef, (snap)=>{
-  let data = normalize(snap.val());
-
-  if(data.batsman === playerId && data.batMove === null){
-   update(gameRef, { batMove: n });
-  }
-
-  if(data.bowler === playerId && data.bowlMove === null){
-   update(gameRef, { bowlMove: n });
-  }
-
- }, { onlyOnce: true });
+// click
+window.add = function(){
+ update(gameRef, {
+  score: Math.floor(Math.random()*100)
+ });
 };
-
-// BUTTONS
-let btn = "";
-for(let i=0;i<=6;i++){
- btn += `<button onclick="play(${i})">${i}</button>`;
-}
-buttons.innerHTML = btn;
 
 </script>
 
