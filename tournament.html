@@ -1,39 +1,57 @@
 <!DOCTYPE html>
 <html>
-<head>
-<link rel="stylesheet" href="style.css">
-</head>
 <body>
 
 <h2>🏆 Tournament</h2>
 
-<div class="card">
-<button onclick="start()">Start Tournament</button>
+<button onclick="start()">Start</button>
+<button onclick="next()">Next Match</button>
+
 <div id="table"></div>
-</div>
 
 <script>
 
-let teams=[
- {name:"A",pts:0},
- {name:"B",pts:0},
- {name:"C",pts:0},
- {name:"D",pts:0},
- {name:"E",pts:0}
-];
-
 function start(){
- teams.forEach(t=>{
-  t.pts=Math.floor(Math.random()*10);
- });
+
+ let T = {
+  teams:[
+   {name:"You",pts:0},
+   {name:"AI1",pts:0},
+   {name:"AI2",pts:0},
+   {name:"AI3",pts:0},
+   {name:"AI4",pts:0}
+  ],
+  matches:[],
+  current:0
+ };
+
+ for(let i=0;i<5;i++){
+  for(let j=i+1;j<5;j++){
+   T.matches.push([i,j]);
+  }
+ }
+
+ localStorage.setItem("T",JSON.stringify(T));
  render();
 }
 
-function render(){
- table.innerHTML=teams
- .sort((a,b)=>b.pts-a.pts)
- .map(t=>t.name+" - "+t.pts+" pts").join("<br>");
+function next(){
+ location="match.html";
 }
+
+function render(){
+ let T = JSON.parse(localStorage.getItem("T"));
+ if(!T) return;
+
+ table.innerHTML="";
+ T.teams.forEach(t=>{
+  let d=document.createElement("div");
+  d.innerText=t.name+" "+t.pts;
+  table.appendChild(d);
+ });
+}
+
+render();
 
 </script>
 
