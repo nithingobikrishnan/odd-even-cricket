@@ -2,37 +2,60 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Test</title>
+<title>Multiplayer Test</title>
 </head>
 
 <body>
 
-<h2 id="score"></h2>
+<h2 id="status">Connecting...</h2>
+<h3 id="score">0</h3>
 <div id="buttons"></div>
 
-<script>
+<script type="module">
 
-let score = document.getElementById("score");
-let buttons = document.getElementById("buttons");
+import { db, ref, set, onValue, update } from "./app.js";
 
-let runs = 0;
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
 
-function play(n){
- runs += n;
- render();
+const statusEl = document.getElementById("status");
+const scoreEl = document.getElementById("score");
+const buttonsEl = document.getElementById("buttons");
+
+if(!room){
+ statusEl.innerText = "No room ID!";
+ throw new Error("No room");
 }
 
-function render(){
- score.innerText = "Score: " + runs;
+const gameRef = ref(db, "rooms/" + room);
 
- let btn = "";
- for(let i=0;i<=6;i++){
-  btn += `<button onclick="play(${i})">${i}</button>`;
- }
- buttons.innerHTML = btn;
+// INIT ROOM (only if empty)
+set(gameRef, {
+ score: 0
+}).catch(()=>{});
+
+// LISTEN
+onValue(gameRef, (snap)=>{
+ let data = snap.val();
+ if(!data) return;
+
+ statusEl.innerText = "Connected";
+ scoreEl.innerText = "Score: " + data.score;
+});
+
+// CLICK
+window.play = function(n){
+ update(gameRef, {
+  score: (Math.random()*100)|0 // just test sync
+ });
+};
+
+// BUTTONS
+let btn = "";
+for(let i=0;i<=6;i++){
+ btn += `<button onclick="play(${i})">${i}</button>`;
 }
-
-render();
+buttonsEl.innerHTML = btn;
 
 </script>
 
