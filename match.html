@@ -2,9 +2,9 @@
 <html>
 <body>
 
-<h2 id="status">Connecting...</h2>
+<h2 id="status">Loading...</h2>
 <h3 id="role"></h3>
-<h3 id="score">0</h3>
+<h3 id="score"></h3>
 <h3 id="info"></h3>
 
 <div id="buttons"></div>
@@ -19,36 +19,44 @@ const gameRef = ref(db, "rooms/" + room);
 // DOM
 const status = document.getElementById("status");
 const roleEl = document.getElementById("role");
-const score = document.getElementById("score");
-const info = document.getElementById("info");
+const scoreEl = document.getElementById("score");
+const infoEl = document.getElementById("info");
 const buttons = document.getElementById("buttons");
 
-// unique player id
+// unique id
 const playerId = localStorage.getItem("pid") || Math.random().toString(36).slice(2);
 localStorage.setItem("pid", playerId);
 
-// 🔥 SAFE INIT (ONLY ONCE)
+// 🔥 SAFE DEFAULT STATE
+const defaultState = {
+ score: 0,
+ batMove: null,
+ bowlMove: null,
+ batsman: null,
+ bowler: null,
+ turnResolved: false
+};
+
+// INIT ONLY ONCE
 get(gameRef).then(snap=>{
  if(!snap.exists()){
-  set(gameRef, {
-   score: 0,
-   batMove: null,
-   bowlMove: null,
-   batsman: null,
-   bowler: null,
-   turnResolved: false
-  });
+  set(gameRef, defaultState);
  }
 });
 
 // LISTENER
 onValue(gameRef, (snap)=>{
- let data = snap.val();
- if(!data) return;
+
+ if(!snap.exists()){
+  status.innerText = "Initializing...";
+  return;
+ }
+
+ let data = { ...defaultState, ...snap.val() }; // 🔥 FORCE DEFAULTS
 
  status.innerText = "Connected";
 
- // assign roles safely
+ // assign roles
  if(!data.batsman){
   update(gameRef, { batsman: playerId });
  }
@@ -56,7 +64,7 @@ onValue(gameRef, (snap)=>{
   update(gameRef, { bowler: playerId });
  }
 
- // show role
+ // role display
  if(data.batsman === playerId){
   roleEl.innerText = "You are BATSMAN";
  }
@@ -67,14 +75,15 @@ onValue(gameRef, (snap)=>{
   roleEl.innerText = "Waiting...";
  }
 
- // SAFE VALUES (NO undefined)
- let bat = data.batMove ?? "-";
- let bowl = data.bowlMove ?? "-";
+ // SAFE DISPLAY (NO undefined possible)
+ scoreEl.innerText = "Score: " + data.score;
 
- score.innerText = "Score: " + (data.score || 0);
- info.innerText = "Bat: " + bat + " | Bowl: " + bowl;
+ let bat = data.batMove === null ? "-" : data.batMove;
+ let bowl = data.bowlMove === null ? "-" : data.bowlMove;
 
- // RESOLVE TURN (ONLY BATSMAN)
+ infoEl.innerText = "Bat: " + bat + " | Bowl: " + bowl;
+
+ // TURN RESOLVE
  if(data.batMove !== null && data.bowlMove !== null && !data.turnResolved){
 
   if(data.batsman === playerId){
@@ -82,7 +91,7 @@ onValue(gameRef, (snap)=>{
    let b1 = Number(data.batMove) || 0;
    let b2 = Number(data.bowlMove) || 0;
 
-   let newScore = data.score || 0;
+   let newScore = data.score;
 
    if(b1 !== b2){
     newScore += b1;
@@ -99,7 +108,7 @@ onValue(gameRef, (snap)=>{
 
    setTimeout(()=>{
     update(gameRef, { turnResolved: false });
-   }, 300);
+   }, 200);
   }
  }
 });
@@ -111,16 +120,13 @@ window.play = function(n){
   let data = snap.val();
   if(!data) return;
 
-  // batsman move
   if(data.batsman === playerId && data.batMove === null){
    update(gameRef, { batMove: n });
   }
 
-  // bowler move
   if(data.bowler === playerId && data.bowlMove === null){
    update(gameRef, { bowlMove: n });
   }
-
  });
 };
 
