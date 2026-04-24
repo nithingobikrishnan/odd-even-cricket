@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>IPL Match</title>
+
 <style>
 body{background:#111;color:white;text-align:center;font-family:sans-serif}
 button{padding:10px;margin:5px;background:#222;color:white;border:none}
@@ -10,226 +11,130 @@ button{padding:10px;margin:5px;background:#222;color:white;border:none}
 </style>
 
 <script type="module">
-const score = document.getElementById("score");
-const info = document.getElementById("info");
-const buttons = document.getElementById("buttons");
-const scorecard = document.getElementById("scorecard");
-const crrEl = document.getElementById("crrEl");
-const rrrEl = document.getElementById("rrrEl");
+
+import { db, ref, onValue, update } from "./app.js";
 import { createGame, resolveBall } from "./engine.js";
 import { botMove } from "./ai.js";
 
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
+const bot = params.get("bot");
+
 let state = createGame();
+let gameRef = room ? ref(db,"rooms/"+room) : null;
 let timer;
 
-// 🧠 PLAYING XI
-state.team = [
- {name:"P1",runs:0,balls:0},
- {name:"P2",runs:0,balls:0},
- {name:"P3",runs:0,balls:0},
- {name:"P4",runs:0,balls:0},
- {name:"P5",runs:0,balls:0},
- {name:"P6",runs:0,balls:0},
- {name:"P7",runs:0,balls:0},
- {name:"P8",runs:0,balls:0},
- {name:"P9",runs:0,balls:0},
- {name:"P10",runs:0,balls:0},
- {name:"P11",runs:0,balls:0}
-];
+// DOM FIX (no undefined)
+const score = document.getElementById("score");
+const info = document.getElementById("info");
+const buttons = document.getElementById("buttons");
+const crrEl = document.getElementById("crrEl");
+const rrrEl = document.getElementById("rrrEl");
 
-state.bench = [
- {name:"Impact1"},
- {name:"Impact2"}
-];
+// MULTIPLAYER LISTENER
+if(room){
+ onValue(gameRef,(snap)=>{
+  let data = snap.val();
+  if(!data) return;
 
-state.striker = 0;
-state.nonStriker = 1;
-state.nextBatsman = 2;
-state.impactUsed = false;
+  state = data.game;
+  render();
+  processTurn();
+ });
+}
 
-// 🎮 PLAY
+// PLAY FUNCTION
 window.play = function(n){
 
  if(state.matchOver) return;
 
- if(state.batMove==null){
+ if(state.batMove == null){
 
   state.batMove = n;
   startTimer();
 
-  setTimeout(()=>{
-   state.bowlMove = botMove(state);
-   processTurn();
-  },400);
+  // BOT MODE ONLY
+  if(bot){
+   setTimeout(()=>{
+    state.bowlMove = botMove(state);
+    processTurn();
+   }, 400);
+  }
 
+ } else {
+
+  state.bowlMove = n;
+  processTurn();
+ }
+
+ // ONLY multiplayer updates Firebase
+ if(room){
+  update(gameRef,{game:state});
  }
 };
 
-// 🔁 TURN
+// TURN LOGIC
 function processTurn(){
 
- if(state.batMove!=null && state.bowlMove!=null){
+ if(state.batMove != null && state.bowlMove != null){
 
   clearTimeout(timer);
 
-  let bat = Number(state.batMove)||0;
-  let bowl = Number(state.bowlMove)||0;
-
-  let striker = state.team[state.striker];
-
-  striker.balls++;
-
-  if(bat===bowl){
-   alert("❌ OUT");
-
-   state.wk++;
-
-   if(state.nextBatsman < state.team.length){
-    state.striker = state.nextBatsman++;
-   }
-
-  } else {
-
-   striker.runs += bat;
-   state.score += bat;
-
-   if(bat % 2 === 1){
-    swapStrike();
-   }
-
-   alert("🏏 "+bat+" runs");
-  }
-
-  state.ball++;
-  if(state.ball % 6 === 0){
-   state.over++;
-   swapStrike();
-  }
-
-  inningsLogic();
-
-  state.batMove=null;
-  state.bowlMove=null;
+  let res = resolveBall(state);
+  state = res.state;
 
   render();
- }
-}
 
-// 🔄 SWAP STRIKE
-function swapStrike(){
- let temp = state.striker;
- state.striker = state.nonStriker;
- state.nonStriker = temp;
-}
-
-// 🧠 INNINGS + RESULT
-function inningsLogic(){
-
- if(state.innings===1 && (state.over>=state.oversLimit || state.wk>=10)){
-  state.target = state.score+1;
-
-  state.innings=2;
-  state.score=0;
-  state.wk=0;
-  state.ball=0;
-  state.over=0;
-
-  state.striker=0;
-  state.nonStriker=1;
-  state.nextBatsman=2;
-
-  alert("🏁 Chase: "+state.target);
- }
-
- if(state.innings===2){
-
-  if(state.score>=state.target){
-   endMatch("CHASED");
-  }
-
-  if(state.over>=state.oversLimit || state.wk>=10){
-   if(state.score>=state.target){
-    endMatch("CHASED");
-   } else {
-    endMatch("DEFENDED");
-   }
+  if(state.matchOver){
+   alert("🏆 "+state.winner);
+   localStorage.setItem("lastMatch", JSON.stringify(state));
+   location = "result.html";
   }
  }
 }
 
-// 🏁 END
-function endMatch(result){
- state.matchOver=true;
- alert("🏆 "+result);
- localStorage.setItem("lastMatch",JSON.stringify(state));
- location="result.html";
-}
-
-// ⏱️ TIMER
+// TIMER
 function startTimer(){
-
  clearTimeout(timer);
 
- timer=setTimeout(()=>{
-  if(state.bowlMove==null){
-   state.score+=1;
+ timer = setTimeout(()=>{
+  if(state.bowlMove == null){
+   state.score += 1;
    alert("⏱️ Extra run");
    render();
   }
  },5000);
 }
 
-// 💥 IMPACT SUB
-window.impact = function(){
-
- if(state.impactUsed) return alert("Already used");
-
- let out = prompt("Replace player index (0-10)");
- let sub = state.bench[0];
-
- if(out>=0 && out<11){
-  state.team[out]=sub;
-  state.impactUsed=true;
-  alert("Impact Sub used");
-  render();
- }
-};
-
-// 🎨 UI
+// RENDER UI
 function render(){
 
  score.innerText = `${state.score}/${state.wk} (${state.over}.${state.ball%6})`;
 
- info.innerText = state.innings===1 
+ info.innerText = state.innings === 1
   ? "Innings 1"
-  : "Target: "+state.target;
+  : "Target: " + state.target;
 
  // CRR
  let balls = state.ball || 1;
  let crr = (state.score/(balls/6)).toFixed(2);
- crrEl.innerText="CRR: "+crr;
+ crrEl.innerText = "CRR: " + crr;
 
  // RRR
- if(state.innings===2){
-  let ballsLeft=(state.oversLimit*6)-state.ball;
-  let runsLeft=state.target-state.score;
-  let rrr = ballsLeft>0 ? (runsLeft/(ballsLeft/6)).toFixed(2):0;
-  rrrEl.innerText="RRR: "+rrr;
+ if(state.innings === 2){
+  let ballsLeft = (state.oversLimit*6) - state.ball;
+  let runsLeft = state.target - state.score;
+
+  let rrr = ballsLeft>0 ? (runsLeft/(ballsLeft/6)).toFixed(2) : 0;
+  rrrEl.innerText = "RRR: " + rrr;
  }
 
  // BUTTONS
- let btn="";
- for(let i=0;i<=10;i++){
-  btn+=`<button onclick="play(${i})">${i}</button>`;
+ let btnHTML = "";
+ for(let i=0;i<=state.maxNumber;i++){
+  btnHTML += `<button onclick="play(${i})">${i}</button>`;
  }
- buttons.innerHTML=btn;
-
- // SCORECARD
- let sc="";
- state.team.forEach((p,i)=>{
-  sc+=`${i===state.striker?"⭐":""}${p.name} - ${p.runs}(${p.balls})<br>`;
- });
- scorecard.innerHTML=sc;
+ buttons.innerHTML = btnHTML;
 }
 
 </script>
@@ -239,15 +144,11 @@ function render(){
 
 <h2 id="score"></h2>
 <h3 id="info"></h3>
+
 <div id="crrEl"></div>
 <div id="rrrEl"></div>
 
-<button onclick="impact()">Impact Sub</button>
-
 <div id="buttons"></div>
-
-<h3>Scorecard</h3>
-<div id="scorecard"></div>
 
 </body>
 </html>
