@@ -1,113 +1,168 @@
 <!DOCTYPE html>
 <html>
 <head>
-<link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>IPL Match</title>
+<style>
+body{background:#111;color:white;text-align:center;font-family:sans-serif}
+button{padding:10px;margin:5px;background:#222;color:white;border:none}
+#score{font-size:28px;font-weight:bold}
+</style>
+
 <script type="module">
+const score = document.getElementById("score");
+const info = document.getElementById("info");
+const buttons = document.getElementById("buttons");
+const scorecard = document.getElementById("scorecard");
+const crrEl = document.getElementById("crrEl");
+const rrrEl = document.getElementById("rrrEl");
+import { createGame, resolveBall } from "./engine.js";
+import { botMove } from "./ai.js";
 
-import { db, ref, onValue, update } from "./app.js";
-import { resolveBall } from "./engine.js";
-
-const params = new URLSearchParams(location.search);
-const room = params.get("room");
-const bot = params.get("bot");
-
-let state;
+let state = createGame();
 let timer;
 
-let gameRef = room ? ref(db,"rooms/"+room) : null;
+// 🧠 PLAYING XI
+state.team = [
+ {name:"P1",runs:0,balls:0},
+ {name:"P2",runs:0,balls:0},
+ {name:"P3",runs:0,balls:0},
+ {name:"P4",runs:0,balls:0},
+ {name:"P5",runs:0,balls:0},
+ {name:"P6",runs:0,balls:0},
+ {name:"P7",runs:0,balls:0},
+ {name:"P8",runs:0,balls:0},
+ {name:"P9",runs:0,balls:0},
+ {name:"P10",runs:0,balls:0},
+ {name:"P11",runs:0,balls:0}
+];
 
-// 🔁 LISTENER
-if(room){
- onValue(gameRef,(snap)=>{
-  let data = snap.val();
-  if(!data || !data.game) return;
+state.bench = [
+ {name:"Impact1"},
+ {name:"Impact2"}
+];
 
-  state = data.game;
-  render();
+state.striker = 0;
+state.nonStriker = 1;
+state.nextBatsman = 2;
+state.impactUsed = false;
 
-  processTurn();
- });
-} else {
- // 🤖 SINGLEPLAYER INIT
- state = {
-  score:0, wk:0, ball:0, over:0,
-  innings:1, target:null,
-  matchOver:false, winner:null,
-  oversLimit:2, maxNumber:10,
-  batMove:null, bowlMove:null
- };
- render();
-}
-
-// 🔥 CORE TURN PROCESS
-function processTurn(){
-
- if(state.matchOver){
-  alert("🏆 " + state.winner);
-  localStorage.setItem("lastMatch", JSON.stringify(state));
-  location = "result.html";
-  return;
- }
-
- if(state.batMove!=null && state.bowlMove!=null){
-
-  clearTimeout(timer);
-
-  let {state:newState, result} = resolveBall(state);
-
-  showResult(result);
-
-  if(room){
-   update(gameRef,{game:newState});
-  } else {
-   state = newState;
-   render();
-  }
- }
-}
-
-// 🎮 PLAYER MOVE
+// 🎮 PLAY
 window.play = function(n){
 
  if(state.matchOver) return;
 
  if(state.batMove==null){
+
   state.batMove = n;
-
-  if(room){
-    update(gameRef,{ "game/batMove":n });
-  }
-
-  // 🤖 AI RESPONSE
-  if(bot){
-    setTimeout(()=>{
-      botMove();
-    },500);
-  }
-
   startTimer();
 
- } else {
-  state.bowlMove = n;
+  setTimeout(()=>{
+   state.bowlMove = botMove(state);
+   processTurn();
+  },400);
 
-  if(room){
-    update(gameRef,{ "game/bowlMove":n });
+ }
+};
+
+// 🔁 TURN
+function processTurn(){
+
+ if(state.batMove!=null && state.bowlMove!=null){
+
+  clearTimeout(timer);
+
+  let bat = Number(state.batMove)||0;
+  let bowl = Number(state.bowlMove)||0;
+
+  let striker = state.team[state.striker];
+
+  striker.balls++;
+
+  if(bat===bowl){
+   alert("❌ OUT");
+
+   state.wk++;
+
+   if(state.nextBatsman < state.team.length){
+    state.striker = state.nextBatsman++;
+   }
+
   } else {
-    processTurn();
+
+   striker.runs += bat;
+   state.score += bat;
+
+   if(bat % 2 === 1){
+    swapStrike();
+   }
+
+   alert("🏏 "+bat+" runs");
+  }
+
+  state.ball++;
+  if(state.ball % 6 === 0){
+   state.over++;
+   swapStrike();
+  }
+
+  inningsLogic();
+
+  state.batMove=null;
+  state.bowlMove=null;
+
+  render();
+ }
+}
+
+// 🔄 SWAP STRIKE
+function swapStrike(){
+ let temp = state.striker;
+ state.striker = state.nonStriker;
+ state.nonStriker = temp;
+}
+
+// 🧠 INNINGS + RESULT
+function inningsLogic(){
+
+ if(state.innings===1 && (state.over>=state.oversLimit || state.wk>=10)){
+  state.target = state.score+1;
+
+  state.innings=2;
+  state.score=0;
+  state.wk=0;
+  state.ball=0;
+  state.over=0;
+
+  state.striker=0;
+  state.nonStriker=1;
+  state.nextBatsman=2;
+
+  alert("🏁 Chase: "+state.target);
+ }
+
+ if(state.innings===2){
+
+  if(state.score>=state.target){
+   endMatch("CHASED");
+  }
+
+  if(state.over>=state.oversLimit || state.wk>=10){
+   if(state.score>=state.target){
+    endMatch("CHASED");
+   } else {
+    endMatch("DEFENDED");
+   }
   }
  }
 }
 
-// 🤖 AI LOGIC (SAFE)
-function botMove(){
-
- if(state.matchOver) return;
-
- let move = Math.floor(Math.random() * (state.maxNumber+1));
-
- state.bowlMove = move;
-
- processTurn();
+// 🏁 END
+function endMatch(result){
+ state.matchOver=true;
+ alert("🏆 "+result);
+ localStorage.setItem("lastMatch",JSON.stringify(state));
+ location="result.html";
 }
 
 // ⏱️ TIMER
@@ -115,63 +170,66 @@ function startTimer(){
 
  clearTimeout(timer);
 
- timer = setTimeout(()=>{
+ timer=setTimeout(()=>{
   if(state.bowlMove==null){
-   alert("⏱️ Extra run!");
-   state.score += 1;
-
-   if(room){
-    update(gameRef,{game:state});
-   } else {
-    render();
-   }
+   state.score+=1;
+   alert("⏱️ Extra run");
+   render();
   }
  },5000);
 }
 
-// 📢 RESULT
-function showResult(r){
- if(r==="W"){
-  alert("❌ OUT!");
- } else {
-  alert("🏏 "+r+" runs");
- }
-}
+// 💥 IMPACT SUB
+window.impact = function(){
 
-// 🎨 RENDER
+ if(state.impactUsed) return alert("Already used");
+
+ let out = prompt("Replace player index (0-10)");
+ let sub = state.bench[0];
+
+ if(out>=0 && out<11){
+  state.team[out]=sub;
+  state.impactUsed=true;
+  alert("Impact Sub used");
+  render();
+ }
+};
+
+// 🎨 UI
 function render(){
 
- document.getElementById("score").innerText =
-  state.score+"/"+state.wk+" ("+state.over+"."+state.ball%6+")";
+ score.innerText = `${state.score}/${state.wk} (${state.over}.${state.ball%6})`;
 
- document.getElementById("info").innerText =
-  state.innings === 1
-   ? "Innings 1"
-   : "Target: " + state.target;
+ info.innerText = state.innings===1 
+  ? "Innings 1"
+  : "Target: "+state.target;
 
  // CRR
  let balls = state.ball || 1;
- let crr = (state.score / (balls/6)).toFixed(2);
- document.getElementById("crr").innerText = "CRR: " + crr;
+ let crr = (state.score/(balls/6)).toFixed(2);
+ crrEl.innerText="CRR: "+crr;
 
  // RRR
- if(state.innings === 2){
-  let ballsLeft = (state.oversLimit*6) - state.ball;
-  let runsLeft = state.target - state.score;
-  let rrr = ballsLeft>0 ? ((runsLeft/(ballsLeft/6))).toFixed(2) : 0;
-
-  document.getElementById("rrr").innerText = "RRR: " + rrr;
+ if(state.innings===2){
+  let ballsLeft=(state.oversLimit*6)-state.ball;
+  let runsLeft=state.target-state.score;
+  let rrr = ballsLeft>0 ? (runsLeft/(ballsLeft/6)).toFixed(2):0;
+  rrrEl.innerText="RRR: "+rrr;
  }
 
- let btns = document.getElementById("btns");
- btns.innerHTML="";
-
- for(let i=0;i<=state.maxNumber;i++){
-  let b=document.createElement("button");
-  b.innerText=i;
-  b.onclick=()=>play(i);
-  btns.appendChild(b);
+ // BUTTONS
+ let btn="";
+ for(let i=0;i<=10;i++){
+  btn+=`<button onclick="play(${i})">${i}</button>`;
  }
+ buttons.innerHTML=btn;
+
+ // SCORECARD
+ let sc="";
+ state.team.forEach((p,i)=>{
+  sc+=`${i===state.striker?"⭐":""}${p.name} - ${p.runs}(${p.balls})<br>`;
+ });
+ scorecard.innerHTML=sc;
 }
 
 </script>
@@ -179,12 +237,17 @@ function render(){
 
 <body>
 
-<h2 id="score">Loading...</h2>
+<h2 id="score"></h2>
 <h3 id="info"></h3>
-<div id="crr"></div>
-<div id="rrr"></div>
+<div id="crrEl"></div>
+<div id="rrrEl"></div>
 
-<div id="btns"></div>
+<button onclick="impact()">Impact Sub</button>
+
+<div id="buttons"></div>
+
+<h3>Scorecard</h3>
+<div id="scorecard"></div>
 
 </body>
 </html>
