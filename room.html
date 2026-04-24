@@ -1,83 +1,37 @@
 <!DOCTYPE html>
 <html>
 <head>
-<link rel="stylesheet" href="style.css">
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-<script src="app.js"></script>
-</head>
+<script type="module">
 
+import { db, ref, set } from "./app.js";
+import { createGame } from "./engine.js";
+
+function createRoom(){
+
+ let room = Math.random().toString(36).slice(2);
+
+ let config = { overs:2, maxNumber:10 };
+
+ let game = createGame(config);
+
+ set(ref(db,"rooms/"+room),{
+  config,
+  game,
+  players:{}
+ }).then(()=>{
+  location="match.html?room="+room;
+ });
+
+}
+
+window.createRoom = createRoom;
+
+</script>
+</head>
 <body>
 
-<h2>Room Setup</h2>
+<h2>Create Room</h2>
+<button onclick="createRoom()">Start Match</button>
 
-<div class="card">
-<p id="roomId"></p>
-
-Overs: <input id="overs" value="5"><br>
-
-<label><input type="checkbox" id="striker"> Striker</label><br>
-<label><input type="checkbox" id="bowler"> Bowler</label><br>
-
-<button onclick="ready()">Ready</button>
-<p id="status"></p>
-
-<button onclick="start()">Start Match</button>
-</div>
-
-<script>
-const room=getRoom();
-roomId.innerText="Room: "+room;
-
-const ref=db.ref("rooms/"+room);
-
-function ready(){
- ref.child("players").push({ready:true});
- status.innerText="Ready ✅";
-}
-
-function start(){
-
- const configData = {
-   overs: Number(overs.value) || 5,
-   striker: striker.checked || false,
-   bowler: bowler.checked || false
- };
-
- // 🔥 FORCE initialize game BEFORE redirect
- const initialGame = {
-   innings:1,
-   score:0,
-   wk:0,
-   ball:0,
-   over:0,
-   target:null,
-   batMove:null,
-   bowlMove:null,
-   batting:"p1",
-   matchOver:false,
-   log:[],
-   oversLimit: configData.overs,
-   strikerMode: configData.striker,
-   bowlerMode: configData.bowler,
-   batsmen:{
-     striker:{name:"Striker",runs:0,balls:0},
-     nonStriker:{name:"NonStriker",runs:0,balls:0}
-   },
-   bowlers:[
-     {name:"Bowler1",runs:0,wk:0,balls:0},
-     {name:"Bowler2",runs:0,wk:0,balls:0}
-   ],
-   currentBowler:0,
-   history:[]
- };
-
- db.ref("rooms/"+room).set({
-   config: configData,
-   game: initialGame,
-   players: {}
- }).then(()=>{
-   // 🔥 ONLY redirect AFTER DB is ready
-   location="match.html?room="+room;
- });
-}
+</body>
+</html>
