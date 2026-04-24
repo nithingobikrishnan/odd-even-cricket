@@ -14,12 +14,3 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 export { db, ref, set, onValue, update };
-
-export function getUsername(){
- let u = localStorage.getItem("username");
- if(!u){
-  u = prompt("Enter name") || "Player";
-  localStorage.setItem("username", u);
- }
- return u;
-}
