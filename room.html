@@ -6,32 +6,24 @@
 import { db, ref, set } from "./app.js";
 import { createGame } from "./engine.js";
 
-function createRoom(){
+window.createRoom = function(){
 
  let room = Math.random().toString(36).slice(2);
 
- let config = { overs:2, maxNumber:10 };
+ let game = createGame();
 
- let game = createGame(config);
-
- set(ref(db,"rooms/"+room),{
-  config,
-  game,
-  players:{}
- }).then(()=>{
+ set(ref(db,"rooms/"+room),{game}).then(()=>{
   location="match.html?room="+room;
  });
 
 }
-
-window.createRoom = createRoom;
 
 </script>
 </head>
 <body>
 
 <h2>Create Room</h2>
-<button onclick="createRoom()">Start Match</button>
+<button onclick="createRoom()">Start</button>
 
 </body>
 </html>
