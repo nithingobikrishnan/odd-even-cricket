@@ -2,7 +2,7 @@
 <html>
 <body>
 
-<h2 id="status">Loading...</h2>
+<h2 id="status">Connected</h2>
 <h3 id="score">Score: 0</h3>
 <h3 id="info">Bat: - | Bowl: -</h3>
 
@@ -15,36 +15,38 @@ import { db, ref, set, onValue, update } from "./app.js";
 const room = "test123";
 const gameRef = ref(db, "rooms/" + room);
 
-const status = document.getElementById("status");
+// player id
+const playerId = localStorage.getItem("pid") || Math.random().toString(36).slice(2);
+localStorage.setItem("pid", playerId);
+
+// INIT
+set(gameRef, {
+ score: 0,
+ batMove: null,
+ bowlMove: null,
+ lastPlayer: null
+});
+
+// UI
 const scoreEl = document.getElementById("score");
 const infoEl = document.getElementById("info");
 const buttons = document.getElementById("buttons");
 
-// 🔥 RESET ROOM (fresh)
-set(gameRef, {
- score: 0,
- batMove: null,
- bowlMove: null
-});
-
 // LISTENER
 onValue(gameRef, (snap)=>{
- let data = snap.val();
- if(!data) return;
+ let d = snap.val();
+ if(!d) return;
 
- status.innerText = "Connected";
-
- let score = data.score || 0;
- let bat = data.batMove;
- let bowl = data.bowlMove;
+ let score = d.score || 0;
+ let bat = d.batMove;
+ let bowl = d.bowlMove;
 
  scoreEl.innerText = "Score: " + score;
-
- infoEl.innerText =
-  "Bat: " + (bat ?? "-") +
+ infoEl.innerText = 
+  "Bat: " + (bat ?? "-") + 
   " | Bowl: " + (bowl ?? "-");
 
- // 🔥 RESOLVE BALL
+ // RESOLVE
  if(bat !== null && bowl !== null){
 
   let newScore = score;
@@ -55,11 +57,12 @@ onValue(gameRef, (snap)=>{
    alert("WICKET!");
   }
 
-  // 🔥 SINGLE RESET WRITE (KEY FIX)
+  // RESET
   set(gameRef, {
    score: newScore,
    batMove: null,
-   bowlMove: null
+   bowlMove: null,
+   lastPlayer: null
   });
  }
 });
@@ -68,26 +71,32 @@ onValue(gameRef, (snap)=>{
 window.play = function(n){
 
  onValue(gameRef, (snap)=>{
-  let data = snap.val();
-  if(!data) return;
+  let d = snap.val();
+  if(!d) return;
 
-  // assign move only if empty
-  if(data.batMove === null){
-   update(gameRef, { batMove: n });
+  // FIRST PLAYER becomes BAT
+  if(d.batMove === null){
+   update(gameRef, {
+    batMove: n,
+    lastPlayer: playerId
+   });
   }
-  else if(data.bowlMove === null){
-   update(gameRef, { bowlMove: n });
+  // SECOND PLAYER becomes BOWL
+  else if(d.bowlMove === null && d.lastPlayer !== playerId){
+   update(gameRef, {
+    bowlMove: n
+   });
   }
 
  }, { onlyOnce: true });
 };
 
 // BUTTONS
-let btn = "";
+let btn="";
 for(let i=0;i<=6;i++){
- btn += `<button onclick="play(${i})">${i}</button>`;
+ btn+=`<button onclick="play(${i})">${i}</button>`;
 }
-buttons.innerHTML = btn;
+buttons.innerHTML=btn;
 
 </script>
 
