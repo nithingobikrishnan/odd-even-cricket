@@ -9,19 +9,38 @@ import { resolveBall } from "./engine.js";
 
 const params = new URLSearchParams(location.search);
 const room = params.get("room");
+const bot = params.get("bot");
 
 let state;
 let timer;
 
-const gameRef = ref(db,"rooms/"+room);
+let gameRef = room ? ref(db,"rooms/"+room) : null;
 
-onValue(gameRef,(snap)=>{
- let data = snap.val();
- if(!data || !data.game) return;
+// 🔁 LISTENER
+if(room){
+ onValue(gameRef,(snap)=>{
+  let data = snap.val();
+  if(!data || !data.game) return;
 
- state = data.game;
+  state = data.game;
+  render();
 
+  processTurn();
+ });
+} else {
+ // 🤖 SINGLEPLAYER INIT
+ state = {
+  score:0, wk:0, ball:0, over:0,
+  innings:1, target:null,
+  matchOver:false, winner:null,
+  oversLimit:2, maxNumber:10,
+  batMove:null, bowlMove:null
+ };
  render();
+}
+
+// 🔥 CORE TURN PROCESS
+function processTurn(){
 
  if(state.matchOver){
   alert("🏆 " + state.winner);
@@ -38,33 +57,79 @@ onValue(gameRef,(snap)=>{
 
   showResult(result);
 
-  update(gameRef,{game:newState});
- }
-});
-
-window.play = function(n){
-
- if(state.batMove==null){
-  update(gameRef,{ "game/batMove":n });
-  startTimer();
- } else {
-  update(gameRef,{ "game/bowlMove":n });
+  if(room){
+   update(gameRef,{game:newState});
+  } else {
+   state = newState;
+   render();
+  }
  }
 }
 
+// 🎮 PLAYER MOVE
+window.play = function(n){
+
+ if(state.matchOver) return;
+
+ if(state.batMove==null){
+  state.batMove = n;
+
+  if(room){
+    update(gameRef,{ "game/batMove":n });
+  }
+
+  // 🤖 AI RESPONSE
+  if(bot){
+    setTimeout(()=>{
+      botMove();
+    },500);
+  }
+
+  startTimer();
+
+ } else {
+  state.bowlMove = n;
+
+  if(room){
+    update(gameRef,{ "game/bowlMove":n });
+  } else {
+    processTurn();
+  }
+ }
+}
+
+// 🤖 AI LOGIC (SAFE)
+function botMove(){
+
+ if(state.matchOver) return;
+
+ let move = Math.floor(Math.random() * (state.maxNumber+1));
+
+ state.bowlMove = move;
+
+ processTurn();
+}
+
+// ⏱️ TIMER
 function startTimer(){
 
  clearTimeout(timer);
 
  timer = setTimeout(()=>{
   if(state.bowlMove==null){
-   state.score += 1;
-   update(gameRef,{game:state});
    alert("⏱️ Extra run!");
+   state.score += 1;
+
+   if(room){
+    update(gameRef,{game:state});
+   } else {
+    render();
+   }
   }
  },5000);
 }
 
+// 📢 RESULT
 function showResult(r){
  if(r==="W"){
   alert("❌ OUT!");
@@ -73,6 +138,7 @@ function showResult(r){
  }
 }
 
+// 🎨 RENDER
 function render(){
 
  document.getElementById("score").innerText =
@@ -86,14 +152,12 @@ function render(){
  // CRR
  let balls = state.ball || 1;
  let crr = (state.score / (balls/6)).toFixed(2);
-
  document.getElementById("crr").innerText = "CRR: " + crr;
 
  // RRR
  if(state.innings === 2){
   let ballsLeft = (state.oversLimit*6) - state.ball;
   let runsLeft = state.target - state.score;
-
   let rrr = ballsLeft>0 ? ((runsLeft/(ballsLeft/6))).toFixed(2) : 0;
 
   document.getElementById("rrr").innerText = "RRR: " + rrr;
