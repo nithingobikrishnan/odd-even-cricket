@@ -3,8 +3,10 @@
 <body>
 
 <h2 id="status">Loading...</h2>
-<h3 id="score">0</h3>
-<button onclick="add()">Click</button>
+<h3 id="score">Score: 0</h3>
+<h3 id="info">Bat: - | Bowl: -</h3>
+
+<div id="buttons"></div>
 
 <script type="module">
 
@@ -14,26 +16,78 @@ const room = "test123";
 const gameRef = ref(db, "rooms/" + room);
 
 const status = document.getElementById("status");
-const score = document.getElementById("score");
+const scoreEl = document.getElementById("score");
+const infoEl = document.getElementById("info");
+const buttons = document.getElementById("buttons");
 
-// create room
-set(gameRef, { score: 0 }).catch(()=>{});
+// 🔥 RESET ROOM (fresh)
+set(gameRef, {
+ score: 0,
+ batMove: null,
+ bowlMove: null
+});
 
-// listen
+// LISTENER
 onValue(gameRef, (snap)=>{
  let data = snap.val();
  if(!data) return;
 
  status.innerText = "Connected";
- score.innerText = data.score;
+
+ let score = data.score || 0;
+ let bat = data.batMove;
+ let bowl = data.bowlMove;
+
+ scoreEl.innerText = "Score: " + score;
+
+ infoEl.innerText =
+  "Bat: " + (bat ?? "-") +
+  " | Bowl: " + (bowl ?? "-");
+
+ // 🔥 RESOLVE BALL
+ if(bat !== null && bowl !== null){
+
+  let newScore = score;
+
+  if(bat !== bowl){
+   newScore += Number(bat);
+  } else {
+   alert("WICKET!");
+  }
+
+  // 🔥 SINGLE RESET WRITE (KEY FIX)
+  set(gameRef, {
+   score: newScore,
+   batMove: null,
+   bowlMove: null
+  });
+ }
 });
 
-// click
-window.add = function(){
- update(gameRef, {
-  score: Math.floor(Math.random()*100)
- });
+// PLAY
+window.play = function(n){
+
+ onValue(gameRef, (snap)=>{
+  let data = snap.val();
+  if(!data) return;
+
+  // assign move only if empty
+  if(data.batMove === null){
+   update(gameRef, { batMove: n });
+  }
+  else if(data.bowlMove === null){
+   update(gameRef, { bowlMove: n });
+  }
+
+ }, { onlyOnce: true });
 };
+
+// BUTTONS
+let btn = "";
+for(let i=0;i<=6;i++){
+ btn += `<button onclick="play(${i})">${i}</button>`;
+}
+buttons.innerHTML = btn;
 
 </script>
 
