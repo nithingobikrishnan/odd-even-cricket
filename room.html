@@ -1,29 +1,46 @@
 <!DOCTYPE html>
 <html>
-<head>
-<script type="module">
-
-import { db, ref, set } from "./app.js";
-import { createGame } from "./engine.js";
-
-window.createRoom = function(){
-
- let room = Math.random().toString(36).slice(2);
-
- let game = createGame();
-
- set(ref(db,"rooms/"+room),{game}).then(()=>{
-  location="match.html?room="+room;
- });
-
-}
-
-</script>
-</head>
 <body>
 
-<h2>Create Room</h2>
-<button onclick="createRoom()">Start</button>
+<h2>Odd Even Cricket</h2>
+
+<input id="roomInput" placeholder="Room ID">
+<br><br>
+
+<button onclick="createRoom()">Create</button>
+<button onclick="joinRoom()">Join</button>
+
+<script type="module">
+
+import { db, ref, set, get } from "./app.js";
+
+const input = document.getElementById("roomInput");
+
+window.createRoom = async () => {
+  let room = input.value || Math.random().toString(36).slice(2,6);
+
+  await set(ref(db, "rooms/" + room), {
+    players: {},
+    game: null
+  });
+
+  location.href = "match.html?room=" + room;
+};
+
+window.joinRoom = async () => {
+  let room = input.value;
+
+  let snap = await get(ref(db, "rooms/" + room));
+
+  if(!snap.exists()){
+    alert("Room not found");
+    return;
+  }
+
+  location.href = "match.html?room=" + room;
+};
+
+</script>
 
 </body>
 </html>
