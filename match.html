@@ -2,101 +2,186 @@
 <html>
 <body>
 
-<h2 id="status">Connected</h2>
-<h3 id="score">Score: 0</h3>
-<h3 id="info">Bat: - | Bowl: -</h3>
+<h2 id="score"></h2>
+<h3 id="info"></h3>
+<h3 id="crr"></h3>
+<h3 id="role"></h3>
 
 <div id="buttons"></div>
 
 <script type="module">
 
-import { db, ref, set, onValue, update } from "./app.js";
+import { db, ref, set, onValue, update, get } from "./app.js";
 
 const room = "test123";
 const gameRef = ref(db, "rooms/" + room);
 
-// player id
+// 🔥 UNIQUE PLAYER
 const playerId = localStorage.getItem("pid") || Math.random().toString(36).slice(2);
 localStorage.setItem("pid", playerId);
 
-// INIT
-set(gameRef, {
+// 🧠 DEFAULT STATE
+const defaultState = {
  score: 0,
+ wickets: 0,
+ balls: 0,
+ overs: 0,
+ innings: 1,
+ target: 0,
+ oversLimit: 2,
  batMove: null,
  bowlMove: null,
- lastPlayer: null
+ batsman: null,
+ bowler: null
+};
+
+// INIT ROOM ONCE
+get(gameRef).then(snap=>{
+ if(!snap.exists()){
+  set(gameRef, defaultState);
+ }
 });
 
-// UI
+// DOM
 const scoreEl = document.getElementById("score");
 const infoEl = document.getElementById("info");
+const crrEl = document.getElementById("crr");
+const roleEl = document.getElementById("role");
 const buttons = document.getElementById("buttons");
+
+// SAFE NORMALIZER
+function safe(d){
+ return { ...defaultState, ...d };
+}
 
 // LISTENER
 onValue(gameRef, (snap)=>{
- let d = snap.val();
- if(!d) return;
+ if(!snap.exists()) return;
 
- let score = d.score || 0;
- let bat = d.batMove;
- let bowl = d.bowlMove;
+ let data = safe(snap.val());
 
- scoreEl.innerText = "Score: " + score;
- infoEl.innerText = 
-  "Bat: " + (bat ?? "-") + 
-  " | Bowl: " + (bowl ?? "-");
+ // ASSIGN ROLES
+ if(!data.batsman){
+  update(gameRef, { batsman: playerId });
+  return;
+ }
+ if(!data.bowler && data.batsman !== playerId){
+  update(gameRef, { bowler: playerId });
+  return;
+ }
 
- // RESOLVE
- if(bat !== null && bowl !== null){
+ // ROLE DISPLAY
+ if(data.batsman === playerId){
+  roleEl.innerText = "BATSMAN";
+ } else if(data.bowler === playerId){
+  roleEl.innerText = "BOWLER";
+ } else {
+  roleEl.innerText = "WAITING";
+ }
 
-  let newScore = score;
+ // UI
+ scoreEl.innerText =
+  data.score + "/" + data.wickets +
+  " (" + data.overs + "." + (data.balls % 6) + ")";
 
-  if(bat !== bowl){
-   newScore += Number(bat);
-  } else {
-   alert("WICKET!");
+ if(data.innings === 1){
+  infoEl.innerText = "Innings 1";
+ } else {
+  infoEl.innerText = "Target: " + data.target;
+ }
+
+ let usedBalls = data.balls || 1;
+ let crr = (data.score / (usedBalls/6)).toFixed(2);
+ crrEl.innerText = "CRR: " + crr;
+
+ // 🔥 RESOLVE BALL
+ if(data.batMove !== null && data.bowlMove !== null){
+
+  // ONLY BATSMAN RESOLVES
+  if(data.batsman === playerId){
+
+   let bat = Number(data.batMove) || 0;
+   let bowl = Number(data.bowlMove) || 0;
+
+   let score = data.score;
+   let wickets = data.wickets;
+   let balls = data.balls;
+   let overs = data.overs;
+   let innings = data.innings;
+   let target = data.target;
+
+   if(bat === bowl){
+    wickets++;
+   } else {
+    score += bat;
+   }
+
+   balls++;
+   if(balls % 6 === 0) overs++;
+
+   // INNINGS SWITCH
+   if(innings === 1 && (overs >= data.oversLimit || wickets >= 10)){
+    target = score + 1;
+
+    innings = 2;
+    score = 0;
+    wickets = 0;
+    balls = 0;
+    overs = 0;
+   }
+
+   // MATCH END
+   if(innings === 2){
+
+    if(score >= target){
+     alert("CHASED!");
+    }
+
+    if(overs >= data.oversLimit || wickets >= 10){
+     if(score < target){
+      alert("DEFENDED!");
+     }
+    }
+   }
+
+   // 🔥 SINGLE SAFE WRITE
+   set(gameRef, {
+    ...data,
+    score,
+    wickets,
+    balls,
+    overs,
+    innings,
+    target,
+    batMove: null,
+    bowlMove: null
+   });
   }
-
-  // RESET
-  set(gameRef, {
-   score: newScore,
-   batMove: null,
-   bowlMove: null,
-   lastPlayer: null
-  });
  }
 });
 
 // PLAY
 window.play = function(n){
 
- onValue(gameRef, (snap)=>{
-  let d = snap.val();
-  if(!d) return;
+ get(gameRef).then(snap=>{
+  let d = safe(snap.val());
 
-  // FIRST PLAYER becomes BAT
-  if(d.batMove === null){
-   update(gameRef, {
-    batMove: n,
-    lastPlayer: playerId
-   });
-  }
-  // SECOND PLAYER becomes BOWL
-  else if(d.bowlMove === null && d.lastPlayer !== playerId){
-   update(gameRef, {
-    bowlMove: n
-   });
+  if(d.batsman === playerId && d.batMove === null){
+   update(gameRef, { batMove: n });
   }
 
- }, { onlyOnce: true });
+  if(d.bowler === playerId && d.bowlMove === null){
+   update(gameRef, { bowlMove: n });
+  }
+ });
 };
 
 // BUTTONS
-let btn="";
+let btn = "";
 for(let i=0;i<=6;i++){
- btn+=`<button onclick="play(${i})">${i}</button>`;
+ btn += `<button onclick="play(${i})">${i}</button>`;
 }
-buttons.innerHTML=btn;
+buttons.innerHTML = btn;
 
 </script>
 
