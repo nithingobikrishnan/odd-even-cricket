@@ -2,186 +2,151 @@
 <html>
 <body>
 
-<h2 id="score"></h2>
-<h3 id="info"></h3>
-<h3 id="crr"></h3>
+<h2 id="status">Connecting...</h2>
 <h3 id="role"></h3>
+<h3 id="score"></h3>
+<h3 id="info"></h3>
 
 <div id="buttons"></div>
 
 <script type="module">
 
-import { db, ref, set, onValue, update, get } from "./app.js";
+import { db, ref, set, update, get, onValue } from "./app.js";
 
-const room = "test123";
-const gameRef = ref(db, "rooms/" + room);
+// ROOM
+const params = new URLSearchParams(location.search);
+const room = params.get("room");
 
-// 🔥 UNIQUE PLAYER
+const roomRef = ref(db, "rooms/" + room);
+const gameRef = ref(db, "rooms/" + room + "/game");
+
+// PLAYER
 const playerId = localStorage.getItem("pid") || Math.random().toString(36).slice(2);
 localStorage.setItem("pid", playerId);
 
-// 🧠 DEFAULT STATE
-const defaultState = {
- score: 0,
- wickets: 0,
- balls: 0,
- overs: 0,
- innings: 1,
- target: 0,
- oversLimit: 2,
- batMove: null,
- bowlMove: null,
- batsman: null,
- bowler: null
+// DEFAULT GAME
+const defaultGame = {
+  score: 0,
+  wickets: 0,
+  batMove: null,
+  bowlMove: null,
+  batsman: null,
+  bowler: null
 };
 
-// INIT ROOM ONCE
-get(gameRef).then(snap=>{
- if(!snap.exists()){
-  set(gameRef, defaultState);
- }
-});
-
 // DOM
+const status = document.getElementById("status");
+const roleEl = document.getElementById("role");
 const scoreEl = document.getElementById("score");
 const infoEl = document.getElementById("info");
-const crrEl = document.getElementById("crr");
-const roleEl = document.getElementById("role");
-const buttons = document.getElementById("buttons");
 
-// SAFE NORMALIZER
-function safe(d){
- return { ...defaultState, ...d };
+// JOIN ROOM
+async function join(){
+
+  let snap = await get(roomRef);
+  let data = snap.val() || {};
+
+  let players = data.players || {};
+
+  if(Object.keys(players).length >= 2 && !players[playerId]){
+    alert("Room full");
+    return;
+  }
+
+  players[playerId] = true;
+  await update(roomRef, { players });
+
+  // INIT GAME
+  let gameSnap = await get(gameRef);
+  if(!gameSnap.exists()){
+    await set(gameRef, defaultGame);
+  }
 }
+
+join();
 
 // LISTENER
 onValue(gameRef, (snap)=>{
- if(!snap.exists()) return;
+  let d = snap.val();
+  if(!d) return;
 
- let data = safe(snap.val());
+  status.innerText = "Connected";
 
- // ASSIGN ROLES
- if(!data.batsman){
-  update(gameRef, { batsman: playerId });
-  return;
- }
- if(!data.bowler && data.batsman !== playerId){
-  update(gameRef, { bowler: playerId });
-  return;
- }
-
- // ROLE DISPLAY
- if(data.batsman === playerId){
-  roleEl.innerText = "BATSMAN";
- } else if(data.bowler === playerId){
-  roleEl.innerText = "BOWLER";
- } else {
-  roleEl.innerText = "WAITING";
- }
-
- // UI
- scoreEl.innerText =
-  data.score + "/" + data.wickets +
-  " (" + data.overs + "." + (data.balls % 6) + ")";
-
- if(data.innings === 1){
-  infoEl.innerText = "Innings 1";
- } else {
-  infoEl.innerText = "Target: " + data.target;
- }
-
- let usedBalls = data.balls || 1;
- let crr = (data.score / (usedBalls/6)).toFixed(2);
- crrEl.innerText = "CRR: " + crr;
-
- // 🔥 RESOLVE BALL
- if(data.batMove !== null && data.bowlMove !== null){
-
-  // ONLY BATSMAN RESOLVES
-  if(data.batsman === playerId){
-
-   let bat = Number(data.batMove) || 0;
-   let bowl = Number(data.bowlMove) || 0;
-
-   let score = data.score;
-   let wickets = data.wickets;
-   let balls = data.balls;
-   let overs = data.overs;
-   let innings = data.innings;
-   let target = data.target;
-
-   if(bat === bowl){
-    wickets++;
-   } else {
-    score += bat;
-   }
-
-   balls++;
-   if(balls % 6 === 0) overs++;
-
-   // INNINGS SWITCH
-   if(innings === 1 && (overs >= data.oversLimit || wickets >= 10)){
-    target = score + 1;
-
-    innings = 2;
-    score = 0;
-    wickets = 0;
-    balls = 0;
-    overs = 0;
-   }
-
-   // MATCH END
-   if(innings === 2){
-
-    if(score >= target){
-     alert("CHASED!");
-    }
-
-    if(overs >= data.oversLimit || wickets >= 10){
-     if(score < target){
-      alert("DEFENDED!");
-     }
-    }
-   }
-
-   // 🔥 SINGLE SAFE WRITE
-   set(gameRef, {
-    ...data,
-    score,
-    wickets,
-    balls,
-    overs,
-    innings,
-    target,
-    batMove: null,
-    bowlMove: null
-   });
+  // assign roles
+  if(!d.batsman){
+    update(gameRef, { batsman: playerId });
+    return;
   }
- }
+
+  if(!d.bowler && d.batsman !== playerId){
+    update(gameRef, { bowler: playerId });
+    return;
+  }
+
+  // role UI
+  if(d.batsman === playerId){
+    roleEl.innerText = "BATSMAN";
+  } else if(d.bowler === playerId){
+    roleEl.innerText = "BOWLER";
+  } else {
+    roleEl.innerText = "WAITING";
+  }
+
+  scoreEl.innerText = "Score: " + (d.score || 0) + "/" + (d.wickets || 0);
+
+  infoEl.innerText =
+    "Bat: " + (d.batMove ?? "-") +
+    " | Bowl: " + (d.bowlMove ?? "-");
+
+  // resolve
+  if(d.batMove !== null && d.bowlMove !== null){
+
+    if(d.batsman === playerId){
+
+      let score = d.score || 0;
+      let wickets = d.wickets || 0;
+
+      if(d.batMove === d.bowlMove){
+        wickets++;
+      } else {
+        score += Number(d.batMove);
+      }
+
+      set(gameRef, {
+        score,
+        wickets,
+        batMove: null,
+        bowlMove: null,
+        batsman: d.batsman,
+        bowler: d.bowler
+      });
+    }
+  }
 });
 
 // PLAY
-window.play = function(n){
+window.play = async function(n){
 
- get(gameRef).then(snap=>{
-  let d = safe(snap.val());
+  let snap = await get(gameRef);
+  let d = snap.val();
+
+  if(!d) return;
 
   if(d.batsman === playerId && d.batMove === null){
-   update(gameRef, { batMove: n });
+    update(gameRef, { batMove: n });
   }
 
   if(d.bowler === playerId && d.bowlMove === null){
-   update(gameRef, { bowlMove: n });
+    update(gameRef, { bowlMove: n });
   }
- });
 };
 
 // BUTTONS
 let btn = "";
 for(let i=0;i<=6;i++){
- btn += `<button onclick="play(${i})">${i}</button>`;
+  btn += `<button onclick="play(${i})">${i}</button>`;
 }
-buttons.innerHTML = btn;
+document.getElementById("buttons").innerHTML = btn;
 
 </script>
 
